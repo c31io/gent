@@ -53,9 +53,12 @@ pub fn Canvas() -> impl IntoView {
             y: 220.0,
             node_type: "retrieval".to_string(),
             label: "Retrieval".to_string(),
-            selected: true,
+            selected: false,
         },
     ]);
+
+    // Selection state
+    let (selected_node_id, set_selected_node_id) = signal(Option::<u32>::None);
 
     // Zoom controls
     let zoom_in = move |_| {
@@ -185,6 +188,9 @@ pub fn Canvas() -> impl IntoView {
                 let canvas_x = (ev.client_x() as f64 - canvas_offset_x - pan) / zoom_val;
                 let canvas_y = (ev.client_y() as f64 - canvas_offset_y - pan_y_val) / zoom_val;
 
+                // Select this node
+                set_selected_node_id.set(Some(node_id));
+
                 // Find node's current position
                 let nodes_snapshot = nodes.get();
                 if let Some(node) = nodes_snapshot.iter().find(|n| n.id == node_id) {
@@ -194,6 +200,9 @@ pub fn Canvas() -> impl IntoView {
                     set_is_panning.set(false);
                     return;
                 }
+            } else {
+                // Clicked on empty canvas - clear selection
+                set_selected_node_id.set(None);
             }
 
             // Cancel only if an actual drag is in progress (not just started)
@@ -407,14 +416,16 @@ pub fn Canvas() -> impl IntoView {
                 {/* Grid background pattern would go here */}
                 {move || {
                     let connections_snapshot = connections.get();
+                    let selected = selected_node_id.get();
                     nodes.get().iter().map(|node| {
                         let has_connection = connections_snapshot.iter().any(|c| c.target_node_id == node.id);
+                        let is_selected = selected == Some(node.id);
                         view! {
                             <GraphNode
                                 x=node.x
                                 y=node.y
                                 label={node.label.clone()}
-                                selected={node.selected}
+                                selected={is_selected}
                                 node_id={node.id}
                                 has_input_connection={has_connection}
                                 on_output_drag_start={Some(Callback::from(handle_output_drag_start))}
