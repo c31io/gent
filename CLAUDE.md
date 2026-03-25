@@ -29,7 +29,17 @@ Gent is a visual node editor for context engineering and agent orchestration —
 - `AppLayout` (`app_layout.rs`): Manages panel sizes via Leptos signals, handles divider drag-to-resize
 - `Canvas` (`canvas.rs`): Renders `GraphNode` components, handles pan (mouse drag) and zoom (scroll wheel)
 - `GraphNode` (`nodes/node.rs`): Individual DOM-based nodes with input/output ports
-- `Connection` (`nodes/connection.rs`): SVG bezier curve wires between nodes
+- `wires-canvas` element: Canvas 2D bezier wires rendered via `draw_connections()` in canvas.rs
+
+### Wire/Connection State
+- `ConnectionState`: Persistent wire between source_node_id (output) and target_node_id (input)
+- `DraggingConnection`: In-progress wire drag with `source_input_node_id` for reroute tracking
+- `rerouting_from` signal: Tracks which input port is being rerouted from (dims original wire)
+
+### Canvas Interaction Patterns
+- Click vs drag: 5px movement threshold (`dx < 5.0 && dy < 5.0` in node.rs)
+- Port events: NO stop_propagation() - let events bubble to canvas for reliable handling
+- Port positioning: Output at x+150, input at x+0, both at y+35 (center of node)
 
 ### Styling
 - CSS custom properties for theming (`--bg-primary`, `--accent-color`, etc.)
@@ -46,4 +56,4 @@ Gent is a visual node editor for context engineering and agent orchestration —
 
 - **New panels**: Add to `AppLayout` view in `app_layout.rs`
 - **New node components**: Create in `src/components/nodes/`
-- **Connection logic**: Modify `Connection` component for different wire routing
+- **Wire routing**: Modify `draw_connections()` and `draw_bezier()` in canvas.rs
