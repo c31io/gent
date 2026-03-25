@@ -62,8 +62,15 @@ html, body, #app {
 /* Main Layout */
 .app-layout {
   display: flex;
+  flex-direction: column;
   width: 100%;
   height: 100%;
+}
+
+.app-layout-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
 }
 
 .panel {
@@ -338,4 +345,110 @@ html, body, #app {
 .panel-content::-webkit-scrollbar-thumb:hover,
 .canvas-container::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
+}
+
+/* Node Inspector Drawer */
+.node-inspector {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 0;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  overflow: hidden;
+  transition: height 0.2s ease;
+  z-index: 100;
+}
+
+.node-inspector.visible {
+  height: 160px;
+}
+
+.inspector-content {
+  padding: 16px 20px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.inspector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.inspector-node-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.node-type-badge {
+  padding: 4px 10px;
+  background: var(--accent-color);
+  color: white;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.node-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.delete-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+}
+
+.delete-btn:hover {
+  background: #fee2e2;
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.inspector-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.config-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.config-input {
+  padding: 8px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.config-input:focus {
+  border-color: var(--accent-color);
+}
+
+.config-input::placeholder {
+  color: var(--text-secondary);
 }
