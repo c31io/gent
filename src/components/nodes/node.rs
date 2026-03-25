@@ -9,6 +9,7 @@ pub fn GraphNode(
     selected: bool,
     node_id: u32,
     has_input_connection: bool,
+    #[prop(default = false)] is_deleting: bool,
     on_output_drag_start: Option<Callback<(u32, f64, f64)>>,
     on_input_drag_end: Option<Callback<(u32, f64, f64)>>,
     on_input_click: Option<Callback<(u32,)>>,
@@ -16,6 +17,11 @@ pub fn GraphNode(
     cancel_connection_drag: Option<Callback<(), ()>>,
 ) -> impl IntoView {
     let class = if selected { "node selected" } else { "node" };
+    let class = if is_deleting {
+        format!("{} deleting", class)
+    } else {
+        class.to_string()
+    };
 
     // Track if mouse moved between mousedown and mouseup on input port
     // Also track if this input has an existing connection (for reroute detection)

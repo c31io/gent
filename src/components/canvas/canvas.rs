@@ -18,6 +18,8 @@ pub fn Canvas(
     /// All connections
     connections: Signal<Vec<ConnectionState>>,
     set_connections: WriteSignal<Vec<ConnectionState>>,
+    /// Node ID currently being deleted (for shrink animation)
+    #[prop(default = None)] deleting_node_id: Option<Signal<Option<u32>>>,
     /// Callback when node selection changes
     #[prop(default = None)] on_selection_change: Option<Callback<Option<u32>>>,
 ) -> impl IntoView {
@@ -453,9 +455,11 @@ pub fn Canvas(
                 {move || {
                     let connections_snapshot = connections.get();
                     let selected = selected_node_id.get();
+                    let deleting = deleting_node_id.and_then(|s| s.get());
                     nodes.get().iter().map(|node| {
                         let has_connection = connections_snapshot.iter().any(|c| c.target_node_id == node.id);
                         let is_selected = selected == Some(node.id);
+                        let is_deleting = deleting == Some(node.id);
                         view! {
                             <GraphNode
                                 x={node.x}
@@ -464,6 +468,7 @@ pub fn Canvas(
                                 selected={is_selected}
                                 node_id={node.id}
                                 has_input_connection={has_connection}
+                                is_deleting={is_deleting}
                                 on_output_drag_start={Some(Callback::from(handle_output_drag_start))}
                                 on_input_drag_end={Some(Callback::from(handle_input_drag_end))}
                                 on_input_click={Some(handle_input_click)}
