@@ -348,9 +348,18 @@ pub fn Canvas() -> impl IntoView {
 
     // Double-click on empty canvas to fit all nodes
     let handle_canvas_dblclick = move |ev: web_sys::MouseEvent| {
-        // Only trigger on empty canvas, not on nodes
+        // Only trigger on empty canvas, not on nodes or zoom controls
         if get_node_id_from_event(&ev).is_some() {
             return;
+        }
+
+        // Ignore if double-clicked on zoom controls
+        if let Some(target) = ev.target() {
+            if let Ok(element) = target.dyn_into::<web_sys::Element>() {
+                if let Ok(Some(_)) = element.closest(".zoom-controls") {
+                    return;
+                }
+            }
         }
 
         let nodes_snapshot = nodes.get();
