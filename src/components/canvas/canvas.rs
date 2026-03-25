@@ -1,8 +1,9 @@
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
-use wasm_bindgen::JsValue;
-use wasm_bindgen::UnwrapThrowExt;
 
+use crate::components::canvas::geometry::{find_input_port_at, get_node_id_from_event, is_port};
+use crate::components::canvas::state::{ConnectionState, DraggingConnection, NodeState};
+use crate::components::canvas::wires::draw_connections;
 use crate::components::nodes::node::GraphNode;
 
 /// Canvas for rendering nodes with pan/zoom
@@ -491,11 +492,11 @@ pub fn Canvas() -> impl IntoView {
     view! {
         <div
             class="canvas-container"
-            on:mousedown=handle_mouse_down
-            on:mousemove=handle_mouse_move
-            on:mouseup=handle_mouse_up
-            on:mouseleave=handle_mouse_up
-            on:wheel=handle_wheel
+            on:mousedown={handle_mouse_down}
+            on:mousemove={handle_mouse_move}
+            on:mouseup={handle_mouse_up}
+            on:mouseleave={handle_mouse_up}
+            on:wheel={handle_wheel}
             on:dblclick={handle_canvas_dblclick}
         >
             {/* Wires canvas layer - OUTSIDE transformed div so we control transform via ctx */}
@@ -513,7 +514,7 @@ pub fn Canvas() -> impl IntoView {
             {/* Transformed canvas area with nodes */}
             <div
                 class="canvas"
-                style:transform=transform_style
+                style:transform={transform_style}
             >
                 {/* Grid background pattern would go here */}
                 {move || {
@@ -524,8 +525,8 @@ pub fn Canvas() -> impl IntoView {
                         let is_selected = selected == Some(node.id);
                         view! {
                             <GraphNode
-                                x=node.x
-                                y=node.y
+                                x={node.x}
+                                y={node.y}
                                 label={node.label.clone()}
                                 selected={is_selected}
                                 node_id={node.id}
@@ -543,175 +544,11 @@ pub fn Canvas() -> impl IntoView {
 
             {/* Zoom Controls */}
             <div class="zoom-controls">
-                <button class="zoom-btn" on:click=zoom_out title="Zoom out">"-"</button>
+                <button class="zoom-btn" on:click={zoom_out} title="Zoom out">"-"</button>
                 <span class="zoom-level">{zoom_percent}</span>
-                <button class="zoom-btn" on:click=zoom_in title="Zoom in">"+"</button>
-                <button class="zoom-btn" on:click=reset_zoom title="Reset view">"⟲"</button>
+                <button class="zoom-btn" on:click={zoom_in} title="Zoom in">"+"</button>
+                <button class="zoom-btn" on:click={reset_zoom} title="Reset view">"⟲"</button>
             </div>
         </div>
     }
-}
-
-/// Minimal node state for rendering
-#[derive(Clone, Debug)]
-pub struct NodeState {
-    pub id: u32,
-    pub x: f64,
-    pub y: f64,
-    pub node_type: String,
-    pub label: String,
-    pub selected: bool,
-}
-
-/// Represents a persistent wire connection between two nodes
-#[derive(Clone, Debug)]
-pub struct ConnectionState {
-    pub id: u32,
-    pub source_node_id: u32,
-    pub target_node_id: u32,
-    pub selected: bool,
-}
-
-/// Tracks an in-progress wire being dragged from a port
-#[derive(Clone, Debug)]
-pub struct DraggingConnection {
-    pub source_node_id: u32,
-    pub source_input_node_id: Option<u32>, // Input node we picked up from (for reroute)
-    pub current_x: f64,
-    pub current_y: f64,
-    pub is_dragging: bool,
-}
-
-/// Find input port element at given viewport coordinates
-fn find_input_port_at(x: f64, y: f64) -> Option<u32> {
-    let doc = web_sys::window()?.document()?;
-    let element = doc.element_from_point(x as f32, y as f32)?;
-    let port_type = element.get_attribute("data-port")?;
-    if port_type != "input" {
-        return None;
-    }
-    let node_id = element.get_attribute("data-node-id")?.parse().ok()?;
-    Some(node_id)
-}
-
-/// Check if the mouse event target is an input port
-fn is_input_port(ev: &web_sys::MouseEvent) -> bool {
-    if let Some(target) = ev.target() {
-        if let Ok(element) = target.dyn_into::<web_sys::Element>() {
-            if let Some(port_type) = element.get_attribute("data-port") {
-                return port_type == "input";
-            }
-        }
-    }
-    false
-}
-
-/// Check if the mouse event target is any port (input or output)
-fn is_port(ev: &web_sys::MouseEvent) -> bool {
-    if let Some(target) = ev.target() {
-        if let Ok(element) = target.dyn_into::<web_sys::Element>() {
-            return element.get_attribute("data-port").is_some();
-        }
-    }
-    false
-}
-
-/// Get node_id from mouse event - traverses up to find the node div
-fn get_node_id_from_event(ev: &web_sys::MouseEvent) -> Option<u32> {
-    if let Some(target) = ev.target() {
-        if let Ok(element) = target.dyn_into::<web_sys::Element>() {
-            // Walk up the DOM tree to find the node div
-            let mut current: Option<web_sys::Element> = Some(element);
-            while let Some(el) = current {
-                // If this element has data-node-id AND it's not a port, it's a node
-                if el.get_attribute("data-node-id").is_some()
-                    && el.get_attribute("data-port").is_none()
-                {
-                    return el.get_attribute("data-node-id")?.parse().ok();
-                }
-                // Move to parent element
-                current = el.parent_element();
-            }
-        }
-    }
-    None
-}
-
-/// Draw a bezier wire on the canvas context
-fn draw_bezier(
-    ctx: &web_sys::CanvasRenderingContext2d,
-    sx: f64,
-    sy: f64,
-    ex: f64,
-    ey: f64,
-    selected: bool,
-    dimmed: bool,
-) {
-    let mid_x = (sx + ex) / 2.0;
-    ctx.begin_path();
-    ctx.move_to(sx, sy);
-    ctx.bezier_curve_to(mid_x, sy, mid_x, ey, ex, ey);
-    let color = if selected {
-        "#6366f1"
-    } else if dimmed {
-        "#505050"
-    } else {
-        "#a0a0a0"
-    };
-    #[allow(deprecated)]
-    ctx.set_stroke_style(&JsValue::from_str(color));
-    ctx.set_line_width(2.0);
-    ctx.stroke();
-}
-
-/// Get port center position from a nodes slice (non-reactive version)
-fn get_port_center_static(node_id: u32, port_type: &str, nodes: &[NodeState]) -> (f64, f64) {
-    if let Some(node) = nodes.iter().find(|n| n.id == node_id) {
-        let port_offset_x = if port_type == "output" { 150.0 } else { 0.0 };
-        let port_offset_y = 35.0;
-        let x = node.x + port_offset_x;
-        let y = node.y + port_offset_y;
-        (x, y)
-    } else {
-        (0.0, 0.0)
-    }
-}
-
-/// Draw all connections on the canvas
-fn draw_connections(
-    ctx: &web_sys::CanvasRenderingContext2d,
-    connections: &[ConnectionState],
-    dragging: &Option<DraggingConnection>,
-    rerouting_from: Option<u32>,
-    nodes: &[NodeState],
-    pan_x: f64,
-    pan_y: f64,
-    zoom: f64,
-) {
-    let canvas = ctx.canvas().unwrap();
-    let width = canvas.width() as f64;
-    let height = canvas.height() as f64;
-    ctx.clear_rect(0.0, 0.0, width, height);
-
-    // Apply transform for pan/zoom
-    ctx.set_transform(zoom, 0.0, 0.0, zoom, pan_x, pan_y).unwrap_throw();
-
-    // Draw established connections
-    for conn in connections {
-        let (sx, sy) = get_port_center_static(conn.source_node_id, "output", nodes);
-        let (ex, ey) = get_port_center_static(conn.target_node_id, "input", nodes);
-        let dimmed = rerouting_from == Some(conn.target_node_id);
-        draw_bezier(ctx, sx, sy, ex, ey, conn.selected, dimmed);
-    }
-
-    // Draw preview connection while dragging
-    if let Some(ref dc) = dragging {
-        if dc.is_dragging {
-            let (sx, sy) = get_port_center_static(dc.source_node_id, "output", nodes);
-            draw_bezier(ctx, sx, sy, dc.current_x, dc.current_y, false, false);
-        }
-    }
-
-    // Reset transform
-    ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0).unwrap_throw();
 }
