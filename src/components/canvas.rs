@@ -18,6 +18,11 @@ pub fn Canvas() -> impl IntoView {
     let (last_mouse_x, set_last_mouse_x) = signal(0.0f64);
     let (last_mouse_y, set_last_mouse_y) = signal(0.0f64);
 
+    // Node dragging state
+    let (dragging_node_id, set_dragging_node_id) = signal(Option::<u32>::None);
+    let (drag_offset_x, set_drag_offset_x) = signal(0.0f64);
+    let (drag_offset_y, set_drag_offset_y) = signal(0.0f64);
+
     // Connection state
     let (connections, set_connections) = signal(Vec::<ConnectionState>::new());
     let (dragging_connection, set_dragging_connection) = signal(Option::<DraggingConnection>::None);
@@ -25,7 +30,7 @@ pub fn Canvas() -> impl IntoView {
     let (rerouting_from, set_rerouting_from) = signal(Option::<u32>::None); // Input node being rerouted from
 
     // Sample nodes for demonstration
-    let (nodes, _set_nodes) = signal(vec![
+    let (nodes, set_nodes) = signal(vec![
         NodeState {
             id: 1,
             x: 100.0,
@@ -164,9 +169,31 @@ pub fn Canvas() -> impl IntoView {
     // Pan handling
     let handle_mouse_down = move |ev: web_sys::MouseEvent| {
         if ev.button() == 0 {
-            // Ignore if mouse is over an input port - let the port handler deal with it
-            if is_input_port(&ev) {
+            // Ignore if mouse is over ANY port - let the port handler deal with it
+            if is_port(&ev) {
                 return;
+            }
+
+            // Check if this is a node body mousedown (not port) - start node drag
+            if let Some(node_id) = get_node_id_from_event(&ev) {
+                let canvas_offset_x = 264.0;
+                let canvas_offset_y = 0.0;
+                let pan = pan_x.get();
+                let pan_y_val = pan_y.get();
+                let zoom_val = zoom.get();
+
+                let canvas_x = (ev.client_x() as f64 - canvas_offset_x - pan) / zoom_val;
+                let canvas_y = (ev.client_y() as f64 - canvas_offset_y - pan_y_val) / zoom_val;
+
+                // Find node's current position
+                let nodes_snapshot = nodes.get();
+                if let Some(node) = nodes_snapshot.iter().find(|n| n.id == node_id) {
+                    set_drag_offset_x.set(canvas_x - node.x);
+                    set_drag_offset_y.set(canvas_y - node.y);
+                    set_dragging_node_id.set(Some(node_id));
+                    set_is_panning.set(false);
+                    return;
+                }
             }
 
             // Cancel only if an actual drag is in progress (not just started)
@@ -184,6 +211,29 @@ pub fn Canvas() -> impl IntoView {
     };
 
     let handle_mouse_move = move |ev: web_sys::MouseEvent| {
+        // Handle node dragging
+        if let Some(node_id) = dragging_node_id.get() {
+            let canvas_offset_x = 264.0;
+            let canvas_offset_y = 0.0;
+            let pan = pan_x.get();
+            let pan_y_val = pan_y.get();
+            let zoom_val = zoom.get();
+
+            let canvas_x = (ev.client_x() as f64 - canvas_offset_x - pan) / zoom_val;
+            let canvas_y = (ev.client_y() as f64 - canvas_offset_y - pan_y_val) / zoom_val;
+
+            let new_x = canvas_x - drag_offset_x.get();
+            let new_y = canvas_y - drag_offset_y.get();
+
+            set_nodes.update(|nodes: &mut Vec<NodeState>| {
+                if let Some(node) = nodes.iter_mut().find(|n| n.id == node_id) {
+                    node.x = new_x;
+                    node.y = new_y;
+                }
+            });
+            return; // Don't process panning while dragging node
+        }
+
         // Check if we need to start a connection drag (first movement after output click)
         let is_dragging = dragging_connection.get().map(|dc| dc.is_dragging).unwrap_or(false);
 
@@ -228,6 +278,7 @@ pub fn Canvas() -> impl IntoView {
     };
 
     let handle_mouse_up = move |ev: web_sys::MouseEvent| {
+        set_dragging_node_id.set(None);
         set_is_panning.set(false);
         // Only cancel drag if we're NOT over an input port
         // If we ARE over an input port, let its handler complete the connection
@@ -440,6 +491,37 @@ fn is_input_port(ev: &web_sys::MouseEvent) -> bool {
         }
     }
     false
+}
+
+/// Check if the mouse event target is any port (input or output)
+fn is_port(ev: &web_sys::MouseEvent) -> bool {
+    if let Some(target) = ev.target() {
+        if let Ok(element) = target.dyn_into::<web_sys::Element>() {
+            return element.get_attribute("data-port").is_some();
+        }
+    }
+    false
+}
+
+/// Get node_id from mouse event - traverses up to find the node div
+fn get_node_id_from_event(ev: &web_sys::MouseEvent) -> Option<u32> {
+    if let Some(target) = ev.target() {
+        if let Ok(element) = target.dyn_into::<web_sys::Element>() {
+            // Walk up the DOM tree to find the node div
+            let mut current: Option<web_sys::Element> = Some(element);
+            while let Some(el) = current {
+                // If this element has data-node-id AND it's not a port, it's a node
+                if el.get_attribute("data-node-id").is_some()
+                    && el.get_attribute("data-port").is_none()
+                {
+                    return el.get_attribute("data-node-id")?.parse().ok();
+                }
+                // Move to parent element
+                current = el.parent_element();
+            }
+        }
+    }
+    None
 }
 
 /// Draw a bezier wire on the canvas context
