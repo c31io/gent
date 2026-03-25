@@ -205,6 +205,22 @@ html, body, #app {
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3), var(--shadow-md);
 }
 
+.node.deleting {
+  animation: shrink-out 0.2s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes shrink-out {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0);
+    opacity: 0;
+  }
+}
+
 .node-header {
   padding: 8px 12px;
   background: var(--bg-tertiary);

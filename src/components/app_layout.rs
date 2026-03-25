@@ -1,4 +1,6 @@
 use leptos::prelude::*;
+use wasm_bindgen_futures::spawn_local;
+use gloo_timers::future::TimeoutFuture;
 
 use crate::components::canvas::state::{ConnectionState, NodeState};
 use crate::components::canvas::Canvas;
@@ -47,14 +49,28 @@ pub fn AppLayout() -> impl IntoView {
 
     let (connections, set_connections) = signal(Vec::<ConnectionState>::new());
     let (selected_node_id, set_selected_node_id) = signal(Option::<u32>::None);
+    let (deleting_node_id, set_deleting_node_id) = signal(Option::<u32>::None);
 
-    // Delete node handler - removes node and its connections
+    // Delete node handler - animates shrink then removes node
     let delete_node = move |node_id: u32| {
-        set_nodes.update(|n: &mut Vec<NodeState>| n.retain(|node| node.id != node_id));
-        set_connections.update(|c: &mut Vec<ConnectionState>| c.retain(|conn| {
-            conn.source_node_id != node_id && conn.target_node_id != node_id
-        }));
+        // First unselect to prevent flash to next node
         set_selected_node_id.set(None);
+
+        // Then set deleting node to trigger shrink animation
+        set_deleting_node_id.set(Some(node_id));
+
+        // After animation completes, remove the node
+        let nodes_to_delete = node_id;
+        let connections_to_delete = node_id;
+
+        spawn_local(async move {
+            TimeoutFuture::new(300).await;
+            set_nodes.update(|n: &mut Vec<NodeState>| n.retain(|node| node.id != nodes_to_delete));
+            set_connections.update(|c: &mut Vec<ConnectionState>| c.retain(|conn| {
+                conn.source_node_id != connections_to_delete && conn.target_node_id != connections_to_delete
+            }));
+            set_deleting_node_id.set(None);
+        });
     };
 
     let handle_left_divider_mouse_down = move |ev: web_sys::MouseEvent| {
@@ -119,6 +135,7 @@ pub fn AppLayout() -> impl IntoView {
                     set_selected_node_id={set_selected_node_id}
                     set_nodes={set_nodes}
                     set_connections={set_connections}
+                    deleting_node_id={Some(deleting_node_id.into())}
                 />
 
                 {/* Right Divider */}
