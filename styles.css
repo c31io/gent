@@ -186,6 +186,7 @@ html, body, #app {
   cursor: move;
   user-select: none;
   transition: border-color 0.15s, box-shadow 0.15s;
+  overflow: visible;
 }
 
 .node:hover {
@@ -215,42 +216,31 @@ html, body, #app {
   color: var(--text-secondary);
 }
 
-.node-ports {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 0;
-}
-
 .node-port {
-  width: 12px;
-  height: 12px;
+  position: absolute;
+  width: 10px;
+  height: 10px;
   background: var(--bg-primary);
   border: 2px solid var(--border-color);
   border-radius: 50%;
   cursor: crosshair;
+  transition: border-color 0.15s, transform 0.15s;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+}
+
+.node-port.input {
+  left: -5px;
+}
+
+.node-port.output {
+  right: -5px;
 }
 
 .node-port:hover {
   border-color: var(--accent-color);
-  transform: scale(1.2);
-}
-
-/* Connection (wire) */
-.connection {
-  position: absolute;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.connection path {
-  fill: none;
-  stroke: var(--wire-color);
-  stroke-width: 2;
-  pointer-events: stroke;
-}
-
-.connection.selected path {
-  stroke: var(--node-selected);
+  transform: translateY(-50%) scale(1.2);
 }
 
 /* Execution Trace */
