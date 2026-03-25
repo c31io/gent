@@ -166,6 +166,8 @@ html, body, #app {
   cursor: grab;
   font-size: 13px;
   transition: all 0.15s;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .palette-item:hover {
