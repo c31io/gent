@@ -18,50 +18,47 @@ pub fn GraphNode(
     let input_drag_start = std::rc::Rc::new(std::cell::Cell::new(Option::<(f64, f64)>::None));
 
     // Output port mousedown - start connection drag
+    // NO stop_propagation - let events bubble to canvas for reliable handling
     let handle_output_mousedown = move |ev: web_sys::MouseEvent| {
         ev.prevent_default();
-        ev.stop_propagation();
         if let Some(cb) = &on_output_drag_start {
             cb.run((node_id, ev.client_x() as f64, ev.client_y() as f64));
         }
     };
 
-    // Input port mousedown - prevent canvas panning, track start position
+    // Input port mousedown - track start position for click vs drag detection
     let input_drag_start_clone = input_drag_start.clone();
     let handle_input_mousedown = move |ev: web_sys::MouseEvent| {
         ev.prevent_default();
-        ev.stop_propagation();
+        // NO stop_propagation - let canvas see this for panning decisions
         input_drag_start_clone.set(Some((ev.client_x() as f64, ev.client_y() as f64)));
-        // Don't call on_input_click here - it will be called on mouseup if not a drag
     };
 
-    // Input port mouseup - complete connection if was a drag, otherwise remove connection
+    // Input port mouseup - complete connection or remove on click
     let input_drag_start_clone2 = input_drag_start.clone();
     let on_input_drag_end_clone = on_input_drag_end.clone();
     let on_input_click_clone = on_input_click.clone();
     let handle_input_mouseup = move |ev: web_sys::MouseEvent| {
         ev.prevent_default();
-        ev.stop_propagation();
+        // NO stop_propagation - let canvas handle too
 
-        // Check if this was a drag FROM the input port itself (input_drag_start set on mousedown)
-        if let Some((start_x, start_y)) = input_drag_start_clone2.get() {
-            let dx = (ev.client_x() as f64 - start_x).abs();
-            let dy = (ev.client_y() as f64 - start_y).abs();
-            let was_drag = dx > 5.0 || dy > 5.0;
-            input_drag_start_clone2.set(None);
-            // If was a drag FROM input, complete connection. If was a click, remove connection.
-            if was_drag {
-                if let Some(cb) = &on_input_drag_end_clone {
-                    cb.run((node_id, ev.client_x() as f64, ev.client_y() as f64));
-                }
-            } else {
-                if let Some(cb) = &on_input_click_clone {
-                    cb.run((node_id,));
-                }
+        let start_pos = input_drag_start_clone2.get();
+        input_drag_start_clone2.set(None);
+
+        // If we have a start_pos and minimal movement, it's a click - remove connection
+        let was_click = start_pos.map(|(sx, sy)| {
+            let dx = (ev.client_x() as f64 - sx).abs();
+            let dy = (ev.client_y() as f64 - sy).abs();
+            dx < 5.0 && dy < 5.0
+        }).unwrap_or(false);
+
+        if was_click && start_pos.is_some() {
+            // Click on input - remove connection
+            if let Some(cb) = &on_input_click_clone {
+                cb.run((node_id,));
             }
         } else {
-            // input_drag_start is None - this is a drag-from-output completing on this input port
-            // Always complete the connection
+            // Drag from output to this input (or drag from input) - complete connection
             if let Some(cb) = &on_input_drag_end_clone {
                 cb.run((node_id, ev.client_x() as f64, ev.client_y() as f64));
             }

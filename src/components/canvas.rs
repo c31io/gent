@@ -1,7 +1,9 @@
 use leptos::prelude::*;
+use wasm_bindgen::JsCast;
+use wasm_bindgen::JsValue;
+use wasm_bindgen::UnwrapThrowExt;
 
 use crate::components::nodes::node::GraphNode;
-use crate::components::nodes::connection::Connection;
 
 /// Canvas for rendering nodes with pan/zoom
 #[component]
@@ -91,6 +93,7 @@ pub fn Canvas() -> impl IntoView {
             source_node_id: node_id,
             current_x: sx,
             current_y: sy,
+            is_dragging: false, // Not dragging yet - will be set to true on mouse movement
         }));
     };
 
@@ -121,9 +124,13 @@ pub fn Canvas() -> impl IntoView {
     // Pan handling
     let handle_mouse_down = move |ev: web_sys::MouseEvent| {
         if ev.button() == 0 {
-            // Check if we're dragging a connection - if so, don't start panning
-            if dragging_connection.get().is_some() {
-                return;
+            // Cancel only if an actual drag is in progress (not just started)
+            // This prevents output port clicks from being cancelled when they bubble here
+            if let Some(dc) = dragging_connection.get() {
+                if dc.is_dragging {
+                    set_dragging_connection.set(None);
+                    return;
+                }
             }
             set_is_panning.set(true);
             set_last_mouse_x.set(ev.client_x() as f64);
@@ -132,6 +139,20 @@ pub fn Canvas() -> impl IntoView {
     };
 
     let handle_mouse_move = move |ev: web_sys::MouseEvent| {
+        // Check if we need to start a connection drag (first movement after output click)
+        let is_dragging = dragging_connection.get().map(|dc| dc.is_dragging).unwrap_or(false);
+
+        if !is_dragging && dragging_connection.get().is_some() {
+            // First movement - this is an actual drag, not a pan
+            set_is_panning.set(false);
+            set_dragging_connection.update(|d| {
+                if let Some(ref mut d) = d {
+                    d.is_dragging = true;
+                }
+            });
+        }
+
+        // Handle panning if still active
         if is_panning.get() {
             let dx = ev.client_x() as f64 - last_mouse_x.get();
             let dy = ev.client_y() as f64 - last_mouse_y.get();
@@ -140,18 +161,20 @@ pub fn Canvas() -> impl IntoView {
             set_pan_x.update(|x| *x += dx);
             set_pan_y.update(|y| *y += dy);
         }
-        if dragging_connection.get().is_some() {
-            // Update the preview connection endpoint
-            // Convert screen coords to canvas SVG coords
-            // Canvas container is offset by ~264px (left panel + divider)
-            let canvas_offset = 264.0; // Approximate - left panel + divider
+
+        // Update connection preview if dragging
+        if dragging_connection.get().is_some() && dragging_connection.get().unwrap().is_dragging {
+            let canvas_offset_x = 264.0;
+            let canvas_offset_y = 0.0;
             let pan = pan_x.get();
             let pan_y_val = pan_y.get();
             let zoom_val = zoom.get();
+
+            let canvas_x = (ev.client_x() as f64 - canvas_offset_x - pan) / zoom_val;
+            let canvas_y = (ev.client_y() as f64 - canvas_offset_y - pan_y_val) / zoom_val;
+
             set_dragging_connection.update(|dc| {
                 if let Some(ref mut d) = dc {
-                    let canvas_x = (ev.client_x() as f64 - canvas_offset - pan) / zoom_val;
-                    let canvas_y = (ev.client_y() as f64 - pan_y_val) / zoom_val;
                     d.current_x = canvas_x;
                     d.current_y = canvas_y;
                 }
@@ -159,10 +182,18 @@ pub fn Canvas() -> impl IntoView {
         }
     };
 
-    let handle_mouse_up = move |_ev: web_sys::MouseEvent| {
+    let handle_mouse_up = move |ev: web_sys::MouseEvent| {
         set_is_panning.set(false);
-        // Cancel any in-progress connection drag
-        set_dragging_connection.set(None);
+        // Only cancel drag if we're NOT over an input port
+        // If we ARE over an input port, let its handler complete the connection
+        if let Some(dc) = dragging_connection.get() {
+            if dc.is_dragging {
+                if find_input_port_at(ev.client_x() as f64, ev.client_y() as f64).is_none() {
+                    // Not over input port - cancel the drag
+                    set_dragging_connection.set(None);
+                }
+            }
+        }
     };
 
     // Scroll to zoom
@@ -189,6 +220,58 @@ pub fn Canvas() -> impl IntoView {
         )
     };
 
+    // Set up canvas animation loop using Effect
+    // This runs after mount and redraws when signals change
+    Effect::new(move |_| {
+        let window = match web_sys::window() {
+            Some(w) => w,
+            None => return,
+        };
+        let document = match window.document() {
+            Some(d) => d,
+            None => return,
+        };
+        let canvas_elem = match document.get_element_by_id("wires-canvas") {
+            Some(e) => e,
+            None => return,
+        };
+        let canvas_ref: web_sys::HtmlCanvasElement = match canvas_elem.dyn_into() {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+
+        // Set canvas size to match container's actual pixel dimensions
+        if let Some(container) = canvas_ref.parent_element() {
+            let container: web_sys::HtmlElement = match container.dyn_into() {
+                Ok(c) => c,
+                Err(_) => return,
+            };
+            let width = container.client_width() as u32;
+            let height = container.client_height() as u32;
+            canvas_ref.set_width(width);
+            canvas_ref.set_height(height);
+        }
+
+        let ctx: web_sys::CanvasRenderingContext2d = match canvas_ref.get_context("2d") {
+            Ok(Some(c)) => c.unchecked_into(),
+            _ => return,
+        };
+
+        // Draw current state
+        let connections = connections.get();
+        let dragging = dragging_connection.get();
+        let nodes = nodes.get();
+        draw_connections(
+            &ctx,
+            &connections,
+            &dragging,
+            &nodes,
+            pan_x.get(),
+            pan_y.get(),
+            zoom.get(),
+        );
+    });
+
     view! {
         <div
             class="canvas-container"
@@ -198,30 +281,23 @@ pub fn Canvas() -> impl IntoView {
             on:mouseleave=handle_mouse_up
             on:wheel=handle_wheel
         >
+            {/* Wires canvas layer - OUTSIDE transformed div so we control transform via ctx */}
+            <canvas
+                id="wires-canvas"
+                style:position="absolute"
+                style:top="0"
+                style:left="0"
+                style:width="100%"
+                style:height="100%"
+                style:pointer-events="none"
+                style:z_index="0"
+            ></canvas>
+
+            {/* Transformed canvas area with nodes */}
             <div
                 class="canvas"
                 style:transform=transform_style
             >
-                {/* Connections SVG layer */}
-                <svg class="connections-svg" style:position="absolute" style:top="0" style:left="0" style:width="100%" style:height="100%" style:pointer-events="none" style:z_index="0">
-                    {/* Render established connections */}
-                    {move || connections.get().iter().map(|conn| {
-                        let (sx, sy) = get_port_center(conn.source_node_id, "output");
-                        let (ex, ey) = get_port_center(conn.target_node_id, "input");
-                        view! {
-                            <Connection start_x={sx} start_y={sy} end_x={ex} end_y={ey} selected={conn.selected} />
-                        }
-                    }).collect::<Vec<_>>()}
-
-                    {/* Render preview connection while dragging */}
-                    {move || dragging_connection.get().map(|dc| {
-                        let (sx, sy) = get_port_center(dc.source_node_id, "output");
-                        view! {
-                            <Connection start_x={sx} start_y={sy} end_x={dc.current_x} end_y={dc.current_y} selected={false} />
-                        }
-                    })}
-                </svg>
-
                 {/* Grid background pattern would go here */}
                 {move || nodes.get().iter().map(|node| {
                     view! {
@@ -276,4 +352,91 @@ pub struct DraggingConnection {
     pub source_node_id: u32,
     pub current_x: f64,
     pub current_y: f64,
+    pub is_dragging: bool,
+}
+
+/// Find input port element at given viewport coordinates
+fn find_input_port_at(x: f64, y: f64) -> Option<u32> {
+    let doc = web_sys::window()?.document()?;
+    let element = doc.element_from_point(x as f32, y as f32)?;
+    let port_type = element.get_attribute("data-port")?;
+    if port_type != "input" {
+        return None;
+    }
+    let node_id = element.get_attribute("data-node-id")?.parse().ok()?;
+    Some(node_id)
+}
+
+/// Draw a bezier wire on the canvas context
+fn draw_bezier(
+    ctx: &web_sys::CanvasRenderingContext2d,
+    sx: f64,
+    sy: f64,
+    ex: f64,
+    ey: f64,
+    selected: bool,
+) {
+    let mid_x = (sx + ex) / 2.0;
+    ctx.begin_path();
+    ctx.move_to(sx, sy);
+    ctx.bezier_curve_to(mid_x, sy, mid_x, ey, ex, ey);
+    if selected {
+        #[allow(deprecated)]
+        ctx.set_stroke_style(&JsValue::from_str("#6366f1"));
+    } else {
+        #[allow(deprecated)]
+        ctx.set_stroke_style(&JsValue::from_str("#a0a0a0"));
+    }
+    ctx.set_line_width(2.0);
+    ctx.stroke();
+}
+
+/// Get port center position from a nodes slice (non-reactive version)
+fn get_port_center_static(node_id: u32, port_type: &str, nodes: &[NodeState]) -> (f64, f64) {
+    if let Some(node) = nodes.iter().find(|n| n.id == node_id) {
+        let port_offset_x = if port_type == "output" { 150.0 } else { 0.0 };
+        let port_offset_y = 35.0;
+        let x = node.x + port_offset_x;
+        let y = node.y + port_offset_y;
+        (x, y)
+    } else {
+        (0.0, 0.0)
+    }
+}
+
+/// Draw all connections on the canvas
+fn draw_connections(
+    ctx: &web_sys::CanvasRenderingContext2d,
+    connections: &[ConnectionState],
+    dragging: &Option<DraggingConnection>,
+    nodes: &[NodeState],
+    pan_x: f64,
+    pan_y: f64,
+    zoom: f64,
+) {
+    let canvas = ctx.canvas().unwrap();
+    let width = canvas.width() as f64;
+    let height = canvas.height() as f64;
+    ctx.clear_rect(0.0, 0.0, width, height);
+
+    // Apply transform for pan/zoom
+    ctx.set_transform(zoom, 0.0, 0.0, zoom, pan_x, pan_y).unwrap_throw();
+
+    // Draw established connections
+    for conn in connections {
+        let (sx, sy) = get_port_center_static(conn.source_node_id, "output", nodes);
+        let (ex, ey) = get_port_center_static(conn.target_node_id, "input", nodes);
+        draw_bezier(ctx, sx, sy, ex, ey, conn.selected);
+    }
+
+    // Draw preview connection while dragging
+    if let Some(ref dc) = dragging {
+        if dc.is_dragging {
+            let (sx, sy) = get_port_center_static(dc.source_node_id, "output", nodes);
+            draw_bezier(ctx, sx, sy, dc.current_x, dc.current_y, false);
+        }
+    }
+
+    // Reset transform
+    ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0).unwrap_throw();
 }

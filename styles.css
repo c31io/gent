@@ -243,24 +243,6 @@ html, body, #app {
   transform: translateY(-50%) scale(1.2);
 }
 
-/* Connection (wire) */
-.connection {
-  position: absolute;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.connection path {
-  fill: none;
-  stroke: var(--wire-color);
-  stroke-width: 2;
-  pointer-events: stroke;
-}
-
-.connection.selected path {
-  stroke: var(--node-selected);
-}
-
 /* Execution Trace */
 .trace-item {
   padding: 12px;
