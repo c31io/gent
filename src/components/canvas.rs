@@ -22,6 +22,7 @@ pub fn Canvas() -> impl IntoView {
     let (connections, set_connections) = signal(Vec::<ConnectionState>::new());
     let (dragging_connection, set_dragging_connection) = signal(Option::<DraggingConnection>::None);
     let (next_connection_id, set_next_connection_id) = signal(1u32);
+    let (rerouting_from, set_rerouting_from) = signal(Option::<u32>::None); // Input node being rerouted from
 
     // Sample nodes for demonstration
     let (nodes, _set_nodes) = signal(vec![
@@ -102,7 +103,7 @@ pub fn Canvas() -> impl IntoView {
         if let Some(dc) = dragging_connection.get() {
             // Only connect if target is different from source
             if dc.source_node_id != node_id {
-                // If rerouting, remove OLD connection first
+                // If rerouting, remove OLD (dimmed) connection first
                 if let Some(src_input) = dc.source_input_node_id {
                     set_connections.update(|c| c.retain(|conn|
                         !(conn.source_node_id == dc.source_node_id && conn.target_node_id == src_input)
@@ -122,6 +123,7 @@ pub fn Canvas() -> impl IntoView {
             // Same target = no-op, do nothing
         }
         set_dragging_connection.set(None);
+        set_rerouting_from.set(None);
     };
 
     // Handle click on input port - remove connection to this node
@@ -139,6 +141,10 @@ pub fn Canvas() -> impl IntoView {
 
         if let Some(src_id) = source_node_id {
             let (sx, sy) = get_port_center(src_id, "output");
+
+            // Mark this input as being rerouted from (dims the original connection)
+            set_rerouting_from.set(Some(args.0));
+
             set_dragging_connection.set(Some(DraggingConnection {
                 source_node_id: src_id,
                 source_input_node_id: Some(args.0), // Mark as reroute
@@ -152,6 +158,7 @@ pub fn Canvas() -> impl IntoView {
     // Cancel connection drag (used when click is detected on input port)
     let cancel_connection_drag: Callback<(), ()> = Callback::new(move |_args: ()| {
         set_dragging_connection.set(None);
+        set_rerouting_from.set(None);
     });
 
     // Pan handling
@@ -228,13 +235,14 @@ pub fn Canvas() -> impl IntoView {
             if dc.is_dragging {
                 let target = find_input_port_at(ev.client_x() as f64, ev.client_y() as f64);
                 if target.is_none() {
+                    // Dropped on empty - remove the connection being rerouted
                     if let Some(src_input) = dc.source_input_node_id {
-                        // Dropped on empty during reroute - remove old connection
                         set_connections.update(|c| c.retain(|conn|
                             !(conn.source_node_id == dc.source_node_id && conn.target_node_id == src_input)
                         ));
                     }
                     set_dragging_connection.set(None);
+                    set_rerouting_from.set(None);
                 }
                 // If over input port, leave dragging_connection for node's handler to complete
             }
@@ -305,11 +313,13 @@ pub fn Canvas() -> impl IntoView {
         // Draw current state
         let connections = connections.get();
         let dragging = dragging_connection.get();
+        let rerouting = rerouting_from.get();
         let nodes = nodes.get();
         draw_connections(
             &ctx,
             &connections,
             &dragging,
+            rerouting,
             &nodes,
             pan_x.get(),
             pan_y.get(),
@@ -440,18 +450,21 @@ fn draw_bezier(
     ex: f64,
     ey: f64,
     selected: bool,
+    dimmed: bool,
 ) {
     let mid_x = (sx + ex) / 2.0;
     ctx.begin_path();
     ctx.move_to(sx, sy);
     ctx.bezier_curve_to(mid_x, sy, mid_x, ey, ex, ey);
-    if selected {
-        #[allow(deprecated)]
-        ctx.set_stroke_style(&JsValue::from_str("#6366f1"));
+    let color = if selected {
+        "#6366f1"
+    } else if dimmed {
+        "#505050"
     } else {
-        #[allow(deprecated)]
-        ctx.set_stroke_style(&JsValue::from_str("#a0a0a0"));
-    }
+        "#a0a0a0"
+    };
+    #[allow(deprecated)]
+    ctx.set_stroke_style(&JsValue::from_str(color));
     ctx.set_line_width(2.0);
     ctx.stroke();
 }
@@ -474,6 +487,7 @@ fn draw_connections(
     ctx: &web_sys::CanvasRenderingContext2d,
     connections: &[ConnectionState],
     dragging: &Option<DraggingConnection>,
+    rerouting_from: Option<u32>,
     nodes: &[NodeState],
     pan_x: f64,
     pan_y: f64,
@@ -491,14 +505,15 @@ fn draw_connections(
     for conn in connections {
         let (sx, sy) = get_port_center_static(conn.source_node_id, "output", nodes);
         let (ex, ey) = get_port_center_static(conn.target_node_id, "input", nodes);
-        draw_bezier(ctx, sx, sy, ex, ey, conn.selected);
+        let dimmed = rerouting_from == Some(conn.target_node_id);
+        draw_bezier(ctx, sx, sy, ex, ey, conn.selected, dimmed);
     }
 
     // Draw preview connection while dragging
     if let Some(ref dc) = dragging {
         if dc.is_dragging {
             let (sx, sy) = get_port_center_static(dc.source_node_id, "output", nodes);
-            draw_bezier(ctx, sx, sy, dc.current_x, dc.current_y, false);
+            draw_bezier(ctx, sx, sy, dc.current_x, dc.current_y, false, false);
         }
     }
 
