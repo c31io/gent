@@ -46,13 +46,13 @@ pub fn RightPanel() -> impl IntoView {
             <div class="panel-header">"Execution Trace"</div>
             <div class="panel-content">
                 {trace_items.iter().map(|entry| {
-                    let highlight_class = if matches!(entry.status, TraceStatus::Intervention) {
+                    let _highlight_class = if matches!(entry.status, TraceStatus::Intervention) {
                         "highlight"
                     } else {
                         ""
                     };
                     view! {
-                        <div class="trace-item" class:highlight_class>
+                        <div class="trace-item" class:_highlight_class>
                             <div class="trace-header">
                                 {entry.procedure.clone()}
                             </div>
