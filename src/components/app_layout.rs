@@ -4,7 +4,7 @@ use gloo_timers::future::TimeoutFuture;
 
 use crate::components::canvas::state::{ConnectionState, NodeState};
 use crate::components::canvas::Canvas;
-use crate::components::left_panel::LeftPanel;
+use crate::components::left_panel::{LeftPanel, NODE_TYPES};
 use crate::components::node_inspector::NodeInspector;
 use crate::components::right_panel::RightPanel;
 
@@ -50,6 +50,31 @@ pub fn AppLayout() -> impl IntoView {
     let (connections, set_connections) = signal(Vec::<ConnectionState>::new());
     let (selected_node_id, set_selected_node_id) = signal(Option::<u32>::None);
     let (deleting_node_id, set_deleting_node_id) = signal(Option::<u32>::None);
+    let (next_node_id, set_next_node_id) = signal(4u32);
+
+    // Handle node drop from palette
+    let handle_node_drop = move |node_type: String, x: f64, y: f64| {
+        let node_id = next_node_id.get();
+        let label = NODE_TYPES
+            .iter()
+            .find(|n| n.id == node_type)
+            .map(|n| n.name)
+            .unwrap_or(&node_type)
+            .to_string();
+
+        let new_node = NodeState {
+            id: node_id,
+            x: x - 75.0,
+            y: y - 50.0,
+            node_type: node_type.clone(),
+            label,
+            selected: false,
+        };
+
+        set_nodes.update(|nodes: &mut Vec<NodeState>| nodes.push(new_node));
+        set_next_node_id.update(|n| *n += 1);
+        set_selected_node_id.set(Some(node_id));
+    };
 
     // Delete node handler - animates shrink then removes node
     let delete_node = move |node_id: u32| {
@@ -136,6 +161,7 @@ pub fn AppLayout() -> impl IntoView {
                     set_nodes={set_nodes}
                     set_connections={set_connections}
                     deleting_node_id={Some(deleting_node_id.into())}
+                    on_node_drop={Some(Callback::from(handle_node_drop))}
                 />
 
                 {/* Right Divider */}
