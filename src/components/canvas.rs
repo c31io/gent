@@ -309,17 +309,109 @@ pub fn Canvas() -> impl IntoView {
         }
     };
 
-    // Scroll to zoom
+    // Scroll to zoom (zoom toward cursor)
     let handle_wheel = move |ev: web_sys::WheelEvent| {
         ev.prevent_default();
         let delta = ev.delta_y();
-        let current = zoom.get();
+        let current_zoom = zoom.get();
         let new_zoom = if delta < 0.0 {
-            (current + 0.1).min(4.0)
+            (current_zoom + 0.1).min(4.0)
         } else {
-            (current - 0.1).max(0.25)
+            (current_zoom - 0.1).max(0.25)
         };
+
+        if new_zoom == current_zoom {
+            return;
+        }
+
+        let canvas_offset_x = 264.0;
+        let canvas_offset_y = 0.0;
+        let cursor_x = ev.client_x() as f64;
+        let cursor_y = ev.client_y() as f64;
+
+        // Canvas position under cursor BEFORE zoom
+        let canvas_x_before = (cursor_x - canvas_offset_x - pan_x.get()) / current_zoom;
+        let canvas_y_before = (cursor_y - canvas_offset_y - pan_y.get()) / current_zoom;
+
+        // Apply new zoom
         set_zoom.set(new_zoom);
+
+        // Adjust pan so the same canvas point remains under cursor after zoom
+        // viewport_point = canvas_point * new_zoom + pan_new
+        // pan_new = viewport_point - canvas_point * new_zoom
+        let new_pan_x = cursor_x - canvas_offset_x - canvas_x_before * new_zoom;
+        let new_pan_y = cursor_y - canvas_offset_y - canvas_y_before * new_zoom;
+
+        set_pan_x.set(new_pan_x);
+        set_pan_y.set(new_pan_y);
+    };
+
+    // Double-click on empty canvas to fit all nodes
+    let handle_canvas_dblclick = move |ev: web_sys::MouseEvent| {
+        // Only trigger on empty canvas, not on nodes
+        if get_node_id_from_event(&ev).is_some() {
+            return;
+        }
+
+        let nodes_snapshot = nodes.get();
+        if nodes_snapshot.is_empty() {
+            return;
+        }
+
+        // Get viewport dimensions from the canvas container
+        let container = match ev.current_target() {
+            Some(c) => c,
+            None => return,
+        };
+        let container: web_sys::HtmlElement = match container.dyn_into() {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let viewport_width = container.client_width() as f64;
+        let viewport_height = container.client_height() as f64;
+
+        // Calculate bounding box of all nodes (use approximate node dimensions)
+        let node_width = 160.0;
+        let node_height = 100.0;
+
+        let min_x = nodes_snapshot.iter().map(|n| n.x).fold(f64::INFINITY, f64::min);
+        let min_y = nodes_snapshot.iter().map(|n| n.y).fold(f64::INFINITY, f64::min);
+        let max_x = nodes_snapshot.iter().map(|n| n.x + node_width).fold(f64::NEG_INFINITY, f64::max);
+        let max_y = nodes_snapshot.iter().map(|n| n.y + node_height).fold(f64::NEG_INFINITY, f64::max);
+
+        let content_width = max_x - min_x;
+        let content_height = max_y - min_y;
+
+        // Padding factor (10% on each side)
+        let padding = 0.1;
+        let available_width = viewport_width * (1.0 - 2.0 * padding);
+        let available_height = viewport_height * (1.0 - 2.0 * padding);
+
+        // Calculate zoom to fit
+        let zoom_to_fit = (available_width / content_width)
+            .min(available_height / content_height)
+            .max(0.25)
+            .min(4.0);
+
+        // Calculate center of content
+        let center_x = (min_x + max_x) / 2.0;
+        let center_y = (min_y + max_y) / 2.0;
+
+        // Calculate pan to center content in viewport
+        // A point at canvas_x, canvas_y appears at:
+        //   screen_x = canvas_x * zoom + pan_x (in container coordinates)
+        // We want the center of content at viewport center:
+        //   viewport_width/2 = center_x * zoom + pan_x
+        //   pan_x = viewport_width/2 - center_x * zoom
+        let viewport_center_x = viewport_width / 2.0;
+        let viewport_center_y = viewport_height / 2.0;
+
+        let new_pan_x = viewport_center_x - center_x * zoom_to_fit;
+        let new_pan_y = viewport_center_y - center_y * zoom_to_fit;
+
+        set_zoom.set(zoom_to_fit);
+        set_pan_x.set(new_pan_x);
+        set_pan_y.set(new_pan_y);
     };
 
     let zoom_percent = move || format!("{}%", (zoom.get() * 100.0).round() as i32);
@@ -395,6 +487,7 @@ pub fn Canvas() -> impl IntoView {
             on:mouseup=handle_mouse_up
             on:mouseleave=handle_mouse_up
             on:wheel=handle_wheel
+            on:dblclick={handle_canvas_dblclick}
         >
             {/* Wires canvas layer - OUTSIDE transformed div so we control transform via ctx */}
             <canvas
