@@ -8,14 +8,18 @@ pub fn GraphNode(
     label: String,
     selected: bool,
     node_id: u32,
+    has_input_connection: bool,
     on_output_drag_start: Option<Callback<(u32, f64, f64)>>,
     on_input_drag_end: Option<Callback<(u32, f64, f64)>>,
     on_input_click: Option<Callback<(u32,)>>,
+    on_input_reroute_start: Option<Callback<(u32,)>>,
+    cancel_connection_drag: Option<Callback<(), ()>>,
 ) -> impl IntoView {
     let class = if selected { "node selected" } else { "node" };
 
     // Track if mouse moved between mousedown and mouseup on input port
-    let input_drag_start = std::rc::Rc::new(std::cell::Cell::new(Option::<(f64, f64)>::None));
+    // Also track if this input has an existing connection (for reroute detection)
+    let input_drag_start = std::rc::Rc::new(std::cell::Cell::new(Option::<(f64, f64, bool)>::None));
 
     // Output port mousedown - start connection drag
     // NO stop_propagation - let events bubble to canvas for reliable handling
@@ -26,18 +30,28 @@ pub fn GraphNode(
         }
     };
 
-    // Input port mousedown - track start position for click vs drag detection
+    // Input port mousedown - if has existing connection, start reroute immediately
     let input_drag_start_clone = input_drag_start.clone();
+    let on_input_reroute_start_clone = on_input_reroute_start.clone();
     let handle_input_mousedown = move |ev: web_sys::MouseEvent| {
         ev.prevent_default();
         // NO stop_propagation - let canvas see this for panning decisions
-        input_drag_start_clone.set(Some((ev.client_x() as f64, ev.client_y() as f64)));
+        input_drag_start_clone.set(Some((ev.client_x() as f64, ev.client_y() as f64, has_input_connection)));
+
+        // If this input has an existing connection, start the reroute drag immediately
+        // so the canvas shows the preview as we drag
+        if has_input_connection {
+            if let Some(cb) = &on_input_reroute_start_clone {
+                cb.run((node_id,));
+            }
+        }
     };
 
-    // Input port mouseup - complete connection or remove on click
+    // Input port mouseup - complete connection or handle click
     let input_drag_start_clone2 = input_drag_start.clone();
     let on_input_drag_end_clone = on_input_drag_end.clone();
     let on_input_click_clone = on_input_click.clone();
+    let cancel_connection_drag_clone = cancel_connection_drag.clone();
     let handle_input_mouseup = move |ev: web_sys::MouseEvent| {
         ev.prevent_default();
         // NO stop_propagation - let canvas handle too
@@ -46,19 +60,22 @@ pub fn GraphNode(
         input_drag_start_clone2.set(None);
 
         // If we have a start_pos and minimal movement, it's a click - remove connection
-        let was_click = start_pos.map(|(sx, sy)| {
+        let was_click = start_pos.map(|(sx, sy, _)| {
             let dx = (ev.client_x() as f64 - sx).abs();
             let dy = (ev.client_y() as f64 - sy).abs();
             dx < 5.0 && dy < 5.0
         }).unwrap_or(false);
 
         if was_click && start_pos.is_some() {
-            // Click on input - remove connection
+            // Click on input - remove connection and cancel any pending drag
             if let Some(cb) = &on_input_click_clone {
                 cb.run((node_id,));
             }
+            if let Some(cb) = &cancel_connection_drag_clone {
+                cb.run(());
+            }
         } else {
-            // Drag from output to this input (or drag from input) - complete connection
+            // Normal drag from output to this input - complete connection
             if let Some(cb) = &on_input_drag_end_clone {
                 cb.run((node_id, ev.client_x() as f64, ev.client_y() as f64));
             }

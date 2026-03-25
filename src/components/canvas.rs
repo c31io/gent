@@ -91,6 +91,7 @@ pub fn Canvas() -> impl IntoView {
         let (sx, sy) = get_port_center(node_id, "output");
         set_dragging_connection.set(Some(DraggingConnection {
             source_node_id: node_id,
+            source_input_node_id: None, // Not a reroute
             current_x: sx,
             current_y: sy,
             is_dragging: false, // Not dragging yet - will be set to true on mouse movement
@@ -101,6 +102,12 @@ pub fn Canvas() -> impl IntoView {
         if let Some(dc) = dragging_connection.get() {
             // Only connect if target is different from source
             if dc.source_node_id != node_id {
+                // If rerouting, remove OLD connection first
+                if let Some(src_input) = dc.source_input_node_id {
+                    set_connections.update(|c| c.retain(|conn|
+                        !(conn.source_node_id == dc.source_node_id && conn.target_node_id == src_input)
+                    ));
+                }
                 // Remove any existing connection TO this input port first
                 set_connections.update(|c| c.retain(|conn| conn.target_node_id != node_id));
                 let new_conn = ConnectionState {
@@ -112,6 +119,7 @@ pub fn Canvas() -> impl IntoView {
                 set_connections.update(|c| c.push(new_conn));
                 set_next_connection_id.update(|n| *n += 1);
             }
+            // Same target = no-op, do nothing
         }
         set_dragging_connection.set(None);
     };
@@ -121,9 +129,39 @@ pub fn Canvas() -> impl IntoView {
         set_connections.update(|c| c.retain(|conn| conn.target_node_id != args.0));
     });
 
+    // Handle reroute start from input port - pick up existing wire
+    let handle_input_reroute_start: Callback<(u32,)> = Callback::new(move |args: (u32,)| {
+        // Find the source node that this input is connected from
+        let source_node_id = connections.get()
+            .iter()
+            .find(|c| c.target_node_id == args.0)
+            .map(|c| c.source_node_id);
+
+        if let Some(src_id) = source_node_id {
+            let (sx, sy) = get_port_center(src_id, "output");
+            set_dragging_connection.set(Some(DraggingConnection {
+                source_node_id: src_id,
+                source_input_node_id: Some(args.0), // Mark as reroute
+                current_x: sx,
+                current_y: sy,
+                is_dragging: false, // Will be set to true on first mouse movement
+            }));
+        }
+    });
+
+    // Cancel connection drag (used when click is detected on input port)
+    let cancel_connection_drag: Callback<(), ()> = Callback::new(move |_args: ()| {
+        set_dragging_connection.set(None);
+    });
+
     // Pan handling
     let handle_mouse_down = move |ev: web_sys::MouseEvent| {
         if ev.button() == 0 {
+            // Ignore if mouse is over an input port - let the port handler deal with it
+            if is_input_port(&ev) {
+                return;
+            }
+
             // Cancel only if an actual drag is in progress (not just started)
             // This prevents output port clicks from being cancelled when they bubble here
             if let Some(dc) = dragging_connection.get() {
@@ -188,10 +226,17 @@ pub fn Canvas() -> impl IntoView {
         // If we ARE over an input port, let its handler complete the connection
         if let Some(dc) = dragging_connection.get() {
             if dc.is_dragging {
-                if find_input_port_at(ev.client_x() as f64, ev.client_y() as f64).is_none() {
-                    // Not over input port - cancel the drag
+                let target = find_input_port_at(ev.client_x() as f64, ev.client_y() as f64);
+                if target.is_none() {
+                    if let Some(src_input) = dc.source_input_node_id {
+                        // Dropped on empty during reroute - remove old connection
+                        set_connections.update(|c| c.retain(|conn|
+                            !(conn.source_node_id == dc.source_node_id && conn.target_node_id == src_input)
+                        ));
+                    }
                     set_dragging_connection.set(None);
                 }
+                // If over input port, leave dragging_connection for node's handler to complete
             }
         }
     };
@@ -299,20 +344,27 @@ pub fn Canvas() -> impl IntoView {
                 style:transform=transform_style
             >
                 {/* Grid background pattern would go here */}
-                {move || nodes.get().iter().map(|node| {
-                    view! {
-                        <GraphNode
-                            x=node.x
-                            y=node.y
-                            label={node.label.clone()}
-                            selected={node.selected}
-                            node_id={node.id}
-                            on_output_drag_start={Some(Callback::from(handle_output_drag_start))}
-                            on_input_drag_end={Some(Callback::from(handle_input_drag_end))}
-                            on_input_click={Some(handle_input_click)}
-                        />
-                    }
-                }).collect::<Vec<_>>()}
+                {move || {
+                    let connections_snapshot = connections.get();
+                    nodes.get().iter().map(|node| {
+                        let has_connection = connections_snapshot.iter().any(|c| c.target_node_id == node.id);
+                        view! {
+                            <GraphNode
+                                x=node.x
+                                y=node.y
+                                label={node.label.clone()}
+                                selected={node.selected}
+                                node_id={node.id}
+                                has_input_connection={has_connection}
+                                on_output_drag_start={Some(Callback::from(handle_output_drag_start))}
+                                on_input_drag_end={Some(Callback::from(handle_input_drag_end))}
+                                on_input_click={Some(handle_input_click)}
+                                on_input_reroute_start={Some(Callback::from(handle_input_reroute_start))}
+                                cancel_connection_drag={Some(cancel_connection_drag)}
+                            />
+                        }
+                    }).collect::<Vec<_>>()
+                }}
             </div>
 
             {/* Zoom Controls */}
@@ -350,6 +402,7 @@ pub struct ConnectionState {
 #[derive(Clone, Debug)]
 pub struct DraggingConnection {
     pub source_node_id: u32,
+    pub source_input_node_id: Option<u32>, // Input node we picked up from (for reroute)
     pub current_x: f64,
     pub current_y: f64,
     pub is_dragging: bool,
@@ -365,6 +418,18 @@ fn find_input_port_at(x: f64, y: f64) -> Option<u32> {
     }
     let node_id = element.get_attribute("data-node-id")?.parse().ok()?;
     Some(node_id)
+}
+
+/// Check if the mouse event target is an input port
+fn is_input_port(ev: &web_sys::MouseEvent) -> bool {
+    if let Some(target) = ev.target() {
+        if let Ok(element) = target.dyn_into::<web_sys::Element>() {
+            if let Some(port_type) = element.get_attribute("data-port") {
+                return port_type == "input";
+            }
+        }
+    }
+    false
 }
 
 /// Draw a bezier wire on the canvas context
