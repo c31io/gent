@@ -254,9 +254,45 @@ pub fn Canvas(
         }
     };
 
+    // Helper to get dragged node type from window
+    let get_dragged_node_type = || -> Option<String> {
+        let window = web_sys::window()?;
+        let val = js_sys::Reflect::get(&window, &"draggedNodeType".into()).ok()?;
+        if val.is_undefined() || val.is_null() {
+            None
+        } else {
+            val.as_string()
+        }
+    };
+
+    // Helper to clear dragged node type
+    let clear_dragged_node_type = || {
+        if let Some(window) = web_sys::window() {
+            let _ = js_sys::Reflect::delete_property(&window, &"draggedNodeType".into());
+        }
+    };
+
     let handle_mouse_up = move |ev: web_sys::MouseEvent| {
         set_dragging_node_id.set(None);
         set_is_panning.set(false);
+
+        // Check if a palette node is being dropped
+        if let Some(callback) = &on_node_drop {
+            if let Some(node_type) = get_dragged_node_type() {
+                let canvas_offset_x = 264.0;
+                let canvas_offset_y = 0.0;
+                let pan = pan_x.get();
+                let pan_y_val = pan_y.get();
+                let zoom_val = zoom.get();
+
+                let canvas_x = (ev.client_x() as f64 - canvas_offset_x - pan) / zoom_val;
+                let canvas_y = (ev.client_y() as f64 - canvas_offset_y - pan_y_val) / zoom_val;
+
+                callback.run((node_type, canvas_x, canvas_y));
+                clear_dragged_node_type();
+            }
+        }
+
         if let Some(dc) = dragging_connection.get() {
             if dc.is_dragging {
                 let target = find_input_port_at(ev.client_x() as f64, ev.client_y() as f64);
@@ -429,24 +465,6 @@ pub fn Canvas(
         );
     });
 
-    // Helper to get dragged node type from window
-    let get_dragged_node_type = || -> Option<String> {
-        let window = web_sys::window()?;
-        let val = js_sys::Reflect::get(&window, &"draggedNodeType".into()).ok()?;
-        if val.is_undefined() || val.is_null() {
-            None
-        } else {
-            val.as_string()
-        }
-    };
-
-    // Helper to clear dragged node type
-    let clear_dragged_node_type = || {
-        if let Some(window) = web_sys::window() {
-            let _ = js_sys::Reflect::delete_property(&window, &"draggedNodeType".into());
-        }
-    };
-
     view! {
         <div
             class="canvas-container"
@@ -456,30 +474,6 @@ pub fn Canvas(
             on:mouseleave={handle_mouse_up}
             on:wheel={handle_wheel}
             on:dblclick={handle_canvas_dblclick}
-            on:dragover={move |ev| {
-                ev.prevent_default();
-                ev.stop_propagation();
-            }}
-            on:drop={move |ev| {
-                ev.prevent_default();
-                ev.stop_propagation();
-
-                if let Some(callback) = &on_node_drop {
-                    if let Some(node_type) = get_dragged_node_type() {
-                        let canvas_offset_x = 264.0;
-                        let canvas_offset_y = 0.0;
-                        let pan = pan_x.get();
-                        let pan_y_val = pan_y.get();
-                        let zoom_val = zoom.get();
-
-                        let canvas_x = (ev.client_x() as f64 - canvas_offset_x - pan) / zoom_val;
-                        let canvas_y = (ev.client_y() as f64 - canvas_offset_y - pan_y_val) / zoom_val;
-
-                        callback.run((node_type, canvas_x, canvas_y));
-                    }
-                }
-                clear_dragged_node_type();
-            }}
         >
             <canvas
                 id="wires-canvas"

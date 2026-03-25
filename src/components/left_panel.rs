@@ -130,21 +130,15 @@ pub fn PaletteSection(category: &'static str, nodes: Vec<&'static NodeType>) -> 
         view! {
             <div
                 class="palette-item"
-                draggable=true
                 data-node-type={node.id}
                 title={node.description}
-                on:dragstart={move |_ev| {
+                on:mousedown={move |_ev| {
                     if let Some(window) = web_sys::window() {
                         let _ = js_sys::Reflect::set(
                             &window,
                             &"draggedNodeType".into(),
                             &node_id.into()
                         );
-                    }
-                }}
-                on:dragend={move |_ev| {
-                    if let Some(window) = web_sys::window() {
-                        let _ = js_sys::Reflect::delete_property(&window, &"draggedNodeType".into());
                     }
                 }}
             >
