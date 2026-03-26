@@ -24,6 +24,8 @@ pub fn Canvas(
     #[prop(default = None)] on_selection_change: Option<Callback<Option<u32>>>,
     /// Callback when a node is dropped from the palette (receives node_type, canvas x, y)
     #[prop(default = None)] on_node_drop: Option<Callback<(String, f64, f64)>>,
+    /// Left panel width signal (for calculating canvas offset)
+    #[prop(default = None)] left_width: Option<Signal<i32>>,
 ) -> impl IntoView {
     // Canvas transform state (local to canvas)
     let (zoom, set_zoom) = signal(1.0f64);
@@ -44,6 +46,11 @@ pub fn Canvas(
     let (dragging_connection, set_dragging_connection) = signal(Option::<DraggingConnection>::None);
     let (rerouting_from, set_rerouting_from) = signal(Option::<u32>::None);
     let (next_connection_id, set_next_connection_id) = signal(1u32);
+
+    // Get canvas offset (left panel width + divider width)
+    let get_canvas_offset_x = move || -> f64 {
+        left_width.map(|w| w.get() as f64 + 4.0).unwrap_or(264.0)
+    };
 
     // Zoom controls
     let zoom_in = move |_| {
@@ -151,7 +158,7 @@ pub fn Canvas(
             }
 
             if let Some(node_id) = get_node_id_from_event(&ev) {
-                let canvas_offset_x = 264.0;
+                let canvas_offset_x = get_canvas_offset_x();
                 let canvas_offset_y = 0.0;
                 let pan = pan_x.get();
                 let pan_y_val = pan_y.get();
@@ -194,7 +201,7 @@ pub fn Canvas(
 
     let handle_mouse_move = move |ev: web_sys::MouseEvent| {
         if let Some(node_id) = dragging_node_id.get() {
-            let canvas_offset_x = 264.0;
+            let canvas_offset_x = get_canvas_offset_x();
             let canvas_offset_y = 0.0;
             let pan = pan_x.get();
             let pan_y_val = pan_y.get();
@@ -236,7 +243,7 @@ pub fn Canvas(
         }
 
         if dragging_connection.get().is_some() && dragging_connection.get().unwrap().is_dragging {
-            let canvas_offset_x = 264.0;
+            let canvas_offset_x = get_canvas_offset_x();
             let canvas_offset_y = 0.0;
             let pan = pan_x.get();
             let pan_y_val = pan_y.get();
@@ -279,7 +286,7 @@ pub fn Canvas(
         // Check if a palette node is being dropped
         if let Some(callback) = &on_node_drop {
             if let Some(node_type) = get_dragged_node_type() {
-                let canvas_offset_x = 264.0;
+                let canvas_offset_x = get_canvas_offset_x();
                 let canvas_offset_y = 0.0;
                 let pan = pan_x.get();
                 let pan_y_val = pan_y.get();
@@ -323,7 +330,7 @@ pub fn Canvas(
             return;
         }
 
-        let canvas_offset_x = 264.0;
+        let canvas_offset_x = get_canvas_offset_x();
         let canvas_offset_y = 0.0;
         let cursor_x = ev.client_x() as f64;
         let cursor_y = ev.client_y() as f64;
