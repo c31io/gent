@@ -153,7 +153,7 @@ pub fn GraphNode(
     has_input_connection: bool,
     #[prop(default = false)] is_deleting: bool,
     on_output_drag_start: Option<Callback<(u32, String, f64, f64)>>,
-    on_input_drag_end: Option<Callback<(u32, f64, f64)>>,
+    on_input_drag_end: Option<Callback<(u32, String, f64, f64)>>,
     on_input_click: Option<Callback<(u32,)>>,
     on_input_reroute_start: Option<Callback<(u32,)>>,
     cancel_connection_drag: Option<Callback<(), ()>>,
@@ -251,6 +251,7 @@ pub fn GraphNode(
                 let on_input_drag_end_clone = on_input_drag_end.clone();
                 let on_input_click_clone = on_input_click.clone();
                 let cancel_connection_drag_clone = cancel_connection_drag.clone();
+                let port_name_for_drag_end = port_name.clone();
                 let handle_input_mouseup = move |ev: web_sys::MouseEvent| {
                     ev.prevent_default();
                     let start_pos = input_drag_start_clone2.get();
@@ -269,7 +270,7 @@ pub fn GraphNode(
                         }
                     } else {
                         if let Some(cb) = &on_input_drag_end_clone {
-                            cb.run((node_id, ev.client_x() as f64, ev.client_y() as f64));
+                            cb.run((node_id, port_name_for_drag_end.clone(), ev.client_x() as f64, ev.client_y() as f64));
                         }
                     }
                 };

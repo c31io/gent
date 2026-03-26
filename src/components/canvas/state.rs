@@ -79,7 +79,9 @@ pub struct NodeState {
 pub struct ConnectionState {
     pub id: u32,
     pub source_node_id: u32,
+    pub source_port_name: String,
     pub target_node_id: u32,
+    pub target_port_name: String,
     pub selected: bool,
 }
 
@@ -87,6 +89,7 @@ pub struct ConnectionState {
 #[derive(Clone, Debug)]
 pub struct DraggingConnection {
     pub source_node_id: u32,
+    pub source_port_name: String,
     pub source_input_node_id: Option<u32>, // Input node we picked up from (for reroute)
     pub current_x: f64,
     pub current_y: f64,
