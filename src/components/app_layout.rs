@@ -254,6 +254,7 @@ pub fn AppLayout() -> impl IntoView {
                     deleting_node_id={Some(deleting_node_id.into())}
                     on_node_drop={Some(Callback::from(handle_node_drop))}
                     left_width={Some(left_width.into())}
+                    right_width={Some(right_width.into())}
                     on_trigger={Some(Callback::new(handle_trigger))}
                     on_selection_change={Some(Callback::new(move |node_id| {
                         if let Some(id) = node_id {
