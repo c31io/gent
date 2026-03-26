@@ -1,8 +1,9 @@
 use leptos::prelude::*;
+use std::collections::HashMap;
 use wasm_bindgen::JsCast;
 
 use crate::components::canvas::geometry::{find_input_port_at, get_node_id_from_event, is_port, is_trigger_button};
-use crate::components::canvas::state::{ConnectionState, DraggingConnection, NodeState, Port, PortDirection, PortType, get_output_ports};
+use crate::components::canvas::state::{ConnectionState, DraggingConnection, NodeState, Port, PortDirection, PortType, get_output_ports, compute_port_offsets, get_port_canvas_position};
 use crate::components::canvas::wires::draw_connections;
 use crate::components::nodes::node::GraphNode;
 
@@ -85,23 +86,42 @@ pub fn Canvas(
         set_pan_y.set(0.0);
     };
 
-    // Get port center position relative to canvas
-    let get_port_center = move |node_id: u32, port_type: &str| -> (f64, f64) {
-        let nodes_snapshot = nodes.get();
-        if let Some(node) = nodes_snapshot.iter().find(|n| n.id == node_id) {
-            let port_offset_x = if port_type == "output" { 150.0 } else { 0.0 };
-            let port_offset_y = 35.0;
-            let x = node.x + port_offset_x;
-            let y = node.y + port_offset_y;
-            (x, y)
-        } else {
-            (0.0, 0.0)
+    // Compute port positions as a memoized HashMap keyed by (node_id, port_name)
+    let port_positions = Memo::new(move |_| {
+        let nodes = nodes.get();
+        let mut positions: HashMap<(u32, String), (f64, f64)> = HashMap::new();
+        for node in &nodes {
+            let input_ports: Vec<_> = node.ports.iter()
+                .filter(|p| p.direction == PortDirection::In)
+                .cloned()
+                .collect();
+            let output_ports = get_output_ports(&node.node_type, &node.variant);
+            let all_ports: Vec<_> = input_ports.into_iter()
+                .chain(output_ports.into_iter())
+                .collect();
+            let ports_with_offsets = compute_port_offsets(&all_ports);
+            for pwo in &ports_with_offsets {
+                let (x, y) = get_port_canvas_position(
+                    node.x,
+                    node.y,
+                    pwo.port.direction.clone(),
+                    pwo.top_offset,
+                );
+                positions.insert((node.id, pwo.port.name.clone()), (x, y));
+            }
         }
+        positions
+    });
+
+    // Get port center position from memo
+    let get_port_center = move |node_id: u32, port_name: &str| -> (f64, f64) {
+        port_positions.get().get(&(node_id, port_name.to_string())).copied()
+            .unwrap_or((0.0, 0.0))
     };
 
     // Port drag handlers
-    let handle_output_drag_start = move |node_id: u32, _mouse_x: f64, _mouse_y: f64| {
-        let (sx, sy) = get_port_center(node_id, "output");
+    let handle_output_drag_start = move |node_id: u32, port_name: String, _mouse_x: f64, _mouse_y: f64| {
+        let (sx, sy) = get_port_center(node_id, &port_name);
         set_dragging_connection.set(Some(DraggingConnection {
             source_node_id: node_id,
             source_input_node_id: None,
@@ -176,7 +196,19 @@ pub fn Canvas(
             .map(|c| c.source_node_id);
 
         if let Some(src_id) = source_node_id {
-            let (sx, sy) = get_port_center(src_id, "output");
+            // Find the first output port of the source node to use for rerouting
+            let nodes_snapshot = nodes.get();
+            let first_output_port_name = nodes_snapshot
+                .iter()
+                .find(|n| n.id == src_id)
+                .and_then(|n| {
+                    get_output_ports(&n.node_type, &n.variant)
+                        .into_iter()
+                        .next()
+                        .map(|p| p.name)
+                })
+                .unwrap_or_else(|| "output".to_string());
+            let (sx, sy) = get_port_center(src_id, &first_output_port_name);
             set_rerouting_from.set(Some(args.0));
             set_dragging_connection.set(Some(DraggingConnection {
                 source_node_id: src_id,
@@ -508,12 +540,14 @@ pub fn Canvas(
         let dragging = dragging_connection.get();
         let rerouting = rerouting_from.get();
         let nodes = nodes.get();
+        let port_pos = port_positions.get();
         draw_connections(
             &ctx,
             &connections,
             &dragging,
             rerouting,
             &nodes,
+            &port_pos,
             pan_x.get(),
             pan_y.get(),
             zoom.get(),
@@ -556,7 +590,8 @@ pub fn Canvas(
                         // Get input ports from node.ports (static), output ports from get_output_ports (dynamic)
                         let input_ports = node.ports.iter().filter(|p| p.direction == PortDirection::In).cloned().collect::<Vec<_>>();
                         let output_ports = get_output_ports(&node.node_type, &node.variant);
-                        let combined_ports = input_ports.into_iter().chain(output_ports.into_iter()).collect::<Vec<_>>();
+                        let all_ports: Vec<Port> = input_ports.into_iter().chain(output_ports.into_iter()).collect();
+                        let combined_ports = compute_port_offsets(&all_ports);
                         view! {
                             <GraphNode
                                 x={node.x}

@@ -1,5 +1,6 @@
 use leptos::prelude::*;
-use crate::components::canvas::state::{Port, PortDirection, PortType, NodeVariant};
+use wasm_bindgen::JsCast;
+use crate::components::canvas::state::{PortWithOffset, PortDirection, PortType, NodeVariant};
 
 /// Renders variant-specific body content for a node
 fn render_variant_body(variant: &NodeVariant) -> impl IntoView {
@@ -148,10 +149,10 @@ pub fn GraphNode(
     selected: bool,
     node_id: u32,
     variant: NodeVariant,
-    ports: Vec<Port>,
+    ports: Vec<PortWithOffset>,
     has_input_connection: bool,
     #[prop(default = false)] is_deleting: bool,
-    on_output_drag_start: Option<Callback<(u32, f64, f64)>>,
+    on_output_drag_start: Option<Callback<(u32, String, f64, f64)>>,
     on_input_drag_end: Option<Callback<(u32, f64, f64)>>,
     on_input_click: Option<Callback<(u32,)>>,
     on_input_reroute_start: Option<Callback<(u32,)>>,
@@ -166,6 +167,14 @@ pub fn GraphNode(
         class.to_string()
     };
 
+    // Calculate content offset based on number of ports
+    // Ports are at: 50px, 75px, 100px, 125px... (FIRST_PORT_OFFSET + i * PORT_SPACING)
+    // Content should start below the last port's bottom edge plus a buffer
+    let in_count = ports.iter().filter(|p| p.port.direction == PortDirection::In).count();
+    let out_count = ports.iter().filter(|p| p.port.direction == PortDirection::Out).count();
+    let max_ports = in_count.max(out_count);
+    let content_offset = (max_ports + 1) as f64 * 25.0;
+
     // Track if mouse moved between mousedown and mouseup on input port
     // Also track if this input has an existing connection (for reroute detection)
     let input_drag_start = std::rc::Rc::new(std::cell::Cell::new(Option::<(f64, f64, bool)>::None));
@@ -174,8 +183,16 @@ pub fn GraphNode(
     // NO stop_propagation - let events bubble to canvas for reliable handling
     let handle_output_mousedown = move |ev: web_sys::MouseEvent| {
         ev.prevent_default();
+        // Extract port_name from the DOM element's data attribute
+        let port_name = ev.target()
+            .and_then(|t| {
+                let element: Result<web_sys::Element, _> = t.dyn_into();
+                element.ok()
+            })
+            .and_then(|el: web_sys::Element| el.get_attribute("data-port-name"))
+            .unwrap_or_else(|| "output".to_string());
         if let Some(cb) = &on_output_drag_start {
-            cb.run((node_id, ev.client_x() as f64, ev.client_y() as f64));
+            cb.run((node_id, port_name, ev.client_x() as f64, ev.client_y() as f64));
         }
     };
 
@@ -189,7 +206,7 @@ pub fn GraphNode(
             <div class="node-header">
                 <span>{label}</span>
             </div>
-            <div class="node-body">
+            <div class="node-body" style:padding-top={format!("{}px", content_offset)}>
                 {match variant {
                     NodeVariant::Trigger => view! {
                         <button
@@ -208,16 +225,17 @@ pub fn GraphNode(
                 }}
             </div>
             {/* Dynamic input ports */}
-            {ports.iter().filter(|p| p.direction == PortDirection::In).map(|port| {
-                let port_class_str = match &port.port_type {
-                    PortType::Text => "node-port text".to_string(),
-                    PortType::Image => "node-port image".to_string(),
-                    PortType::Audio => "node-port audio".to_string(),
-                    PortType::File => "node-port file".to_string(),
-                    PortType::Embeddings => "node-port embeddings".to_string(),
-                    PortType::Trigger => "node-port trigger".to_string(),
+            {ports.iter().filter(|p| p.port.direction == PortDirection::In).map(|port| {
+                let port_class_str = match &port.port.port_type {
+                    PortType::Text => "node-port text input".to_string(),
+                    PortType::Image => "node-port image input".to_string(),
+                    PortType::Audio => "node-port audio input".to_string(),
+                    PortType::File => "node-port file input".to_string(),
+                    PortType::Embeddings => "node-port embeddings input".to_string(),
+                    PortType::Trigger => "node-port trigger input".to_string(),
                 };
-                let port_name = port.name.clone();
+                let port_name = port.port.name.clone();
+                let top_offset = port.top_offset;
                 let input_drag_start_clone = input_drag_start.clone();
                 let on_input_reroute_start_clone = on_input_reroute_start.clone();
                 let handle_input_mousedown = move |ev: web_sys::MouseEvent| {
@@ -264,6 +282,7 @@ pub fn GraphNode(
                         data-node-id={node_id}
                         data-port-name={port_name.clone()}
                         title={port_name_clone}
+                        style:top={format!("{}px", top_offset)}
                         on:mousedown=handle_input_mousedown
                         on:mouseup=handle_input_mouseup
                     >
@@ -272,16 +291,17 @@ pub fn GraphNode(
                 }
             }).collect::<Vec<_>>()}
             {/* Dynamic output ports */}
-            {ports.iter().filter(|p| p.direction == PortDirection::Out).map(|port| {
-                let port_class_str = match &port.port_type {
-                    PortType::Text => "node-port text".to_string(),
-                    PortType::Image => "node-port image".to_string(),
-                    PortType::Audio => "node-port audio".to_string(),
-                    PortType::File => "node-port file".to_string(),
-                    PortType::Embeddings => "node-port embeddings".to_string(),
-                    PortType::Trigger => "node-port trigger".to_string(),
+            {ports.iter().filter(|p| p.port.direction == PortDirection::Out).map(|port| {
+                let port_class_str = match &port.port.port_type {
+                    PortType::Text => "node-port text output".to_string(),
+                    PortType::Image => "node-port image output".to_string(),
+                    PortType::Audio => "node-port audio output".to_string(),
+                    PortType::File => "node-port file output".to_string(),
+                    PortType::Embeddings => "node-port embeddings output".to_string(),
+                    PortType::Trigger => "node-port trigger output".to_string(),
                 };
-                let port_name = port.name.clone();
+                let port_name = port.port.name.clone();
+                let top_offset = port.top_offset;
                 let port_name_clone = port_name.clone();
                 let port_name_clone2 = port_name.clone();
                 view! {
@@ -291,6 +311,7 @@ pub fn GraphNode(
                         data-node-id={node_id}
                         data-port-name={port_name}
                         title={port_name_clone}
+                        style:top={format!("{}px", top_offset)}
                         on:mousedown=handle_output_mousedown
                     >
                         <span class="port-label">{port_name_clone2}</span>
