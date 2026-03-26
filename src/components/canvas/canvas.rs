@@ -391,6 +391,10 @@ pub fn Canvas(
                     set_dragging_connection.set(None);
                     set_rerouting_from.set(None);
                 }
+            } else {
+                // Clicked but didn't drag - cancel the connection
+                set_dragging_connection.set(None);
+                set_rerouting_from.set(None);
             }
         }
     };
