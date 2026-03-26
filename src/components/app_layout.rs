@@ -4,9 +4,10 @@ use gloo_timers::future::TimeoutFuture;
 
 use crate::components::canvas::state::{ConnectionState, NodeState, NodeStatus};
 use crate::components::canvas::Canvas;
+use crate::components::execution_engine::{ExecutionState, get_downstream_nodes};
+use crate::components::execution_trace::ExecutionTrace;
 use crate::components::left_panel::{LeftPanel, NODE_TYPES};
 use crate::components::node_inspector::NodeInspector;
-use crate::components::right_panel::RightPanel;
 
 /// Main application layout with left panel, canvas, and right panel
 #[component]
@@ -59,6 +60,65 @@ pub fn AppLayout() -> impl IntoView {
     let (dragging_node_type, set_dragging_node_type) = signal(Option::<String>::None);
     let (drag_x, set_drag_x) = signal(0.0);
     let (drag_y, set_drag_y) = signal(0.0);
+
+    // Execution state for the execution engine
+    let (execution_state, set_execution_state) = signal(ExecutionState::new());
+
+    // Handle trigger node execution
+    let handle_trigger = move |node_id: u32| {
+        let nodes_snapshot = nodes.get();
+        let connections_snapshot = connections.get();
+
+        // Find the trigger node
+        if let Some(_trigger_node) = nodes_snapshot.iter().find(|n| n.id == node_id && n.node_type == "trigger") {
+            // Get downstream nodes
+            let downstream = get_downstream_nodes(&connections_snapshot, node_id);
+
+            // Create execution state
+            let mut exec = ExecutionState::new();
+            exec.running = true;
+
+            // Add trigger task
+            let mut trigger_task = crate::components::execution_engine::Task::new(node_id, "trigger", None);
+            trigger_task.status = crate::components::execution_engine::TaskStatus::Running;
+            trigger_task.started_at = Some(std::time::Instant::now());
+            trigger_task.add_message("Trigger fired", crate::components::execution_engine::TraceLevel::Info);
+            trigger_task.finished_at = Some(std::time::Instant::now());
+            trigger_task.status = crate::components::execution_engine::TaskStatus::Complete;
+            exec.tasks.push(trigger_task);
+
+            // Queue downstream tasks
+            for downstream_id in downstream {
+                if let Some(node) = nodes_snapshot.iter().find(|n| n.id == downstream_id) {
+                    let mut task = crate::components::execution_engine::Task::new(downstream_id, &node.node_type, None);
+                    task.status = crate::components::execution_engine::TaskStatus::Running;
+                    task.started_at = Some(std::time::Instant::now());
+                    task.add_message(&format!("Executing {}...", node.label), crate::components::execution_engine::TraceLevel::Info);
+
+                    // Simple synchronous execution for MVP (no actual async)
+                    // Web search stub
+                    let result = if node.node_type == "web_search" {
+                        task.add_message("Web Search → { mock results }", crate::components::execution_engine::TraceLevel::Info);
+                        Some(r#"{"query":"mock","results":[]}"#.to_string())
+                    } else if node.node_type == "code_execute" {
+                        task.add_message("Code Execute → (TBD)", crate::components::execution_engine::TraceLevel::Info);
+                        Some("code executed".to_string())
+                    } else {
+                        task.add_message(&format!("{} complete", node.label), crate::components::execution_engine::TraceLevel::Info);
+                        Some("ok".to_string())
+                    };
+
+                    task.finished_at = Some(std::time::Instant::now());
+                    task.status = crate::components::execution_engine::TaskStatus::Complete;
+                    task.result = result;
+                    exec.tasks.push(task);
+                }
+            }
+
+            exec.running = false;
+            set_execution_state.set(exec);
+        }
+    };
 
     // Callback to start palette drag
     let on_palette_drag_start: Callback<String> = Callback::new(move |node_type: String| {
@@ -188,6 +248,7 @@ pub fn AppLayout() -> impl IntoView {
                     deleting_node_id={Some(deleting_node_id.into())}
                     on_node_drop={Some(Callback::from(handle_node_drop))}
                     left_width={Some(left_width.into())}
+                    on_trigger={Some(Callback::new(handle_trigger))}
                 />
 
                 {/* Right Divider */}
@@ -201,7 +262,7 @@ pub fn AppLayout() -> impl IntoView {
                     class="panel panel-right"
                     style:width=move || format!("{}px", right_width.get())
                 >
-                    <RightPanel />
+                    <ExecutionTrace execution={execution_state.into()} />
                 </div>
             </div>
 
