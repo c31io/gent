@@ -722,3 +722,156 @@ html, body, #app {
     top: 50%;
     transform: translateY(-50%);
 }
+
+/* Inspector drawer styles */
+.node-inspector {
+    position: fixed;
+    bottom: 0;
+    left: var(--panel-width-left);
+    right: var(--panel-width-right);
+    height: 0;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+    overflow: hidden;
+    transition: height 0.2s ease;
+    z-index: 100;
+}
+
+.node-inspector.visible {
+    height: 200px;
+}
+
+.inspector-content {
+    padding: 16px 20px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.inspector-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.inspector-node-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.inspector-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.close-btn {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.15s;
+}
+
+.close-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+/* Property groups */
+.property-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.property-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+}
+
+.property-input {
+    padding: 8px 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text-primary);
+    outline: none;
+}
+
+.property-input:focus {
+    border-color: var(--accent-color);
+}
+
+.property-textarea {
+    padding: 8px 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text-primary);
+    outline: none;
+    resize: vertical;
+    font-family: inherit;
+}
+
+.property-textarea:focus {
+    border-color: var(--accent-color);
+}
+
+.property-textarea.code {
+    font-family: monospace;
+}
+
+.property-readonly {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.property-groups {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Port list in inspector */
+.port-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 8px 0;
+}
+
+.port-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.port-item .port-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.port-direction {
+    font-size: 10px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+}
