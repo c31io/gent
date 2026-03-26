@@ -61,13 +61,17 @@ pub fn AppLayout() -> impl IntoView {
         ConnectionState {
             id: 1,
             source_node_id: 1,
+            source_port_name: "output".to_string(),
             target_node_id: 2,
+            target_port_name: "input".to_string(),
             selected: false,
         },
         ConnectionState {
             id: 2,
             source_node_id: 2,
+            source_port_name: "output".to_string(),
             target_node_id: 3,
+            target_port_name: "input".to_string(),
             selected: false,
         },
     ]);

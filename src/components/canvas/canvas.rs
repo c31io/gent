@@ -124,6 +124,7 @@ pub fn Canvas(
         let (sx, sy) = get_port_center(node_id, &port_name);
         set_dragging_connection.set(Some(DraggingConnection {
             source_node_id: node_id,
+            source_port_name: port_name.clone(),
             source_input_node_id: None,
             current_x: sx,
             current_y: sy,
@@ -131,7 +132,7 @@ pub fn Canvas(
         }));
     };
 
-    let handle_input_drag_end = move |node_id: u32, _x: f64, _y: f64| {
+    let handle_input_drag_end = move |node_id: u32, target_port_name: String, _x: f64, _y: f64| {
         if let Some(dc) = dragging_connection.get() {
             if dc.source_node_id != node_id {
                 // Get source and target nodes
@@ -174,7 +175,9 @@ pub fn Canvas(
                 let new_conn = ConnectionState {
                     id: next_connection_id.get(),
                     source_node_id: dc.source_node_id,
+                    source_port_name: dc.source_port_name.clone(),
                     target_node_id: node_id,
+                    target_port_name,
                     selected: false,
                 };
                 set_connections.update(|c: &mut Vec<ConnectionState>| c.push(new_conn));
@@ -190,28 +193,19 @@ pub fn Canvas(
     });
 
     let handle_input_reroute_start: Callback<(u32,)> = Callback::new(move |args: (u32,)| {
-        let source_node_id = connections.get()
+        let all_connections = connections.get();
+        let existing_conn = all_connections
             .iter()
-            .find(|c| c.target_node_id == args.0)
-            .map(|c| c.source_node_id);
+            .find(|c| c.target_node_id == args.0);
 
-        if let Some(src_id) = source_node_id {
-            // Find the first output port of the source node to use for rerouting
-            let nodes_snapshot = nodes.get();
-            let first_output_port_name = nodes_snapshot
-                .iter()
-                .find(|n| n.id == src_id)
-                .and_then(|n| {
-                    get_output_ports(&n.node_type, &n.variant)
-                        .into_iter()
-                        .next()
-                        .map(|p| p.name)
-                })
-                .unwrap_or_else(|| "output".to_string());
-            let (sx, sy) = get_port_center(src_id, &first_output_port_name);
+        if let Some(conn) = existing_conn {
+            let src_id = conn.source_node_id;
+            let src_port_name = conn.source_port_name.clone();
+            let (sx, sy) = get_port_center(src_id, &src_port_name);
             set_rerouting_from.set(Some(args.0));
             set_dragging_connection.set(Some(DraggingConnection {
                 source_node_id: src_id,
+                source_port_name: src_port_name,
                 source_input_node_id: Some(args.0),
                 current_x: sx,
                 current_y: sy,
