@@ -25,6 +25,10 @@ Gent is a visual node editor for context engineering and agent orchestration —
 - **web-sys** for DOM event handling (mouse events for pan/resize)
 - **Tauri** for desktop shell
 
+### WASM Compatibility
+- `std::time::Instant` doesn't work in WASM - use `js_sys::Date::now()` for timestamps
+- `Timestamp` struct in execution_engine.rs wraps this pattern
+
 ### Key Components
 - `AppLayout` (`app_layout.rs`): Manages panel sizes via Leptos signals, handles divider drag-to-resize
 - `Canvas` (`canvas.rs`): Renders `GraphNode` components, handles pan (mouse drag) and zoom (scroll wheel)
@@ -39,7 +43,29 @@ Gent is a visual node editor for context engineering and agent orchestration —
 ### Canvas Interaction Patterns
 - Click vs drag: 5px movement threshold (`dx < 5.0 && dy < 5.0` in node.rs)
 - Port events: NO stop_propagation() - let events bubble to canvas for reliable handling
-- Port positioning: Output at x+150, input at x+0, both at y+35 (center of node)
+- Trigger button: `.trigger-btn` class on node headers triggers execution
+
+### Canvas Geometry
+
+- `src/components/canvas/geometry.rs` - DOM-based hit testing via `element_from_point()` and `data-*` attributes
+- `find_input_port_at()`, `is_port()`, `is_trigger_button()`, `get_node_id_from_event()` helpers
+
+### Port Type Validation
+
+- Connections validate port type compatibility before allowing (port types: Trigger, Data, Control)
+- `ConnectionState` stores `source_port_name` and `target_port_name` for precise wire endpoints
+
+### Node Port Layout
+
+- Dynamic port positioning: ports stack vertically per side based on port index
+- Port colors via CSS variables (`--port-trigger-color`, `--port-data-color`, `--port-control-color`)
+- Output ports: right side; Input ports: left side
+
+### Execution Engine
+
+- `src/components/execution_engine.rs` - Task execution, timestamps, trace logging
+- `src/components/execution_trace.rs` - Right panel display of execution traces
+- `Task::new()`, `TaskStatus::Running/Complete`, `TraceEntry` for logging
 
 ### Styling
 - CSS custom properties for theming (`--bg-primary`, `--accent-color`, etc.)
