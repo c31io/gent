@@ -20,16 +20,6 @@ fn render_variant_body(variant: &NodeVariant) -> impl IntoView {
                 placeholder="File path..."
             />
         }.into_any(),
-        NodeVariant::Trigger => view! {
-            <button
-                class="trigger-btn"
-                on:mousedown={move |ev| {
-                    ev.prevent_default();
-                }}
-            >
-                "Run"
-            </button>
-        }.into_any(),
         NodeVariant::Template { template } => view! {
             <textarea
                 class="node-variant-textarea"
@@ -144,6 +134,8 @@ fn render_variant_body(variant: &NodeVariant) -> impl IntoView {
                 rows="2"
             >{schema.clone()}</textarea>
         }.into_any(),
+        // Trigger variant is handled separately in the GraphNode view
+        _ => view! { <div /> }.into_any(),
     }
 }
 
@@ -198,7 +190,22 @@ pub fn GraphNode(
                 <span>{label}</span>
             </div>
             <div class="node-body">
-                {render_variant_body(&variant)}
+                {match variant {
+                    NodeVariant::Trigger => view! {
+                        <button
+                            class="trigger-btn"
+                            on:mousedown={move |ev| {
+                                ev.prevent_default();
+                                if let Some(cb) = &on_trigger {
+                                    cb.run(node_id);
+                                }
+                            }}
+                        >
+                            "Run"
+                        </button>
+                    }.into_any(),
+                    _ => render_variant_body(&variant).into_any(),
+                }}
             </div>
             {/* Dynamic input ports */}
             {ports.iter().filter(|p| p.direction == PortDirection::In).map(|port| {
