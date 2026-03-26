@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
-use crate::components::canvas::geometry::{find_input_port_at, get_node_id_from_event, is_port};
+use crate::components::canvas::geometry::{find_input_port_at, get_node_id_from_event, is_port, is_trigger_button};
 use crate::components::canvas::state::{ConnectionState, DraggingConnection, NodeState};
 use crate::components::canvas::wires::draw_connections;
 use crate::components::nodes::node::GraphNode;
@@ -26,6 +26,8 @@ pub fn Canvas(
     #[prop(default = None)] on_node_drop: Option<Callback<(String, f64, f64)>>,
     /// Left panel width signal (for calculating canvas offset)
     #[prop(default = None)] left_width: Option<Signal<i32>>,
+    /// Callback when trigger node is clicked
+    #[prop(default = None)] on_trigger: Option<Callback<u32>>,
 ) -> impl IntoView {
     // Canvas transform state (local to canvas)
     let (zoom, set_zoom) = signal(1.0f64);
@@ -170,6 +172,11 @@ pub fn Canvas(
                 set_selected_node_id.set(Some(node_id));
                 if let Some(callback) = on_selection_change {
                     callback.run(Some(node_id));
+                }
+
+                // Check if this is a trigger button click - if so, don't drag (button handles trigger)
+                if is_trigger_button(&ev) {
+                    return;
                 }
 
                 let nodes_snapshot = nodes.get();
@@ -505,6 +512,7 @@ pub fn Canvas(
                         let has_connection = connections_snapshot.iter().any(|c| c.target_node_id == node.id);
                         let is_selected = selected == Some(node.id);
                         let is_deleting = deleting == Some(node.id);
+                        let is_trigger = node.node_type == "trigger";
                         view! {
                             <GraphNode
                                 x={node.x}
@@ -514,11 +522,13 @@ pub fn Canvas(
                                 node_id={node.id}
                                 has_input_connection={has_connection}
                                 is_deleting={is_deleting}
+                                is_trigger={is_trigger}
                                 on_output_drag_start={Some(Callback::from(handle_output_drag_start))}
                                 on_input_drag_end={Some(Callback::from(handle_input_drag_end))}
                                 on_input_click={Some(handle_input_click)}
                                 on_input_reroute_start={Some(Callback::from(handle_input_reroute_start))}
                                 cancel_connection_drag={Some(cancel_connection_drag)}
+                                on_trigger={on_trigger}
                             />
                         }
                     }).collect::<Vec<_>>()

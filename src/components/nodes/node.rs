@@ -10,11 +10,13 @@ pub fn GraphNode(
     node_id: u32,
     has_input_connection: bool,
     #[prop(default = false)] is_deleting: bool,
+    #[prop(default = false)] is_trigger: bool,
     on_output_drag_start: Option<Callback<(u32, f64, f64)>>,
     on_input_drag_end: Option<Callback<(u32, f64, f64)>>,
     on_input_click: Option<Callback<(u32,)>>,
     on_input_reroute_start: Option<Callback<(u32,)>>,
     cancel_connection_drag: Option<Callback<(), ()>>,
+    on_trigger: Option<Callback<u32>>,
 ) -> impl IntoView {
     let class = if selected { "node selected" } else { "node" };
     let class = if is_deleting {
@@ -99,7 +101,23 @@ pub fn GraphNode(
                 <span>{label}</span>
             </div>
             <div class="node-body">
-                {"Node content"}
+                {if is_trigger {
+                    view! {
+                        <button
+                            class="trigger-btn"
+                            on:mousedown={move |ev| {
+                                ev.prevent_default();
+                                if let Some(cb) = &on_trigger {
+                                    cb.run(node_id);
+                                }
+                            }}
+                        >
+                            "Run"
+                        </button>
+                    }.into_any()
+                } else {
+                    view! { <span>{"Node content"}</span> }.into_any()
+                }}
             </div>
             {/* Input port - positioned at left edge, vertically centered */}
             <div
