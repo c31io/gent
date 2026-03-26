@@ -286,11 +286,19 @@ pub fn AppLayout() -> impl IntoView {
             <NodeInspector
                 selected_node={inspector_node.into()}
                 on_node_delete={Some(Callback::new(move |node_id| {
-                    set_nodes.update(|nodes| {
-                        nodes.retain(|n| n.id != node_id);
-                    });
-                    set_connections.update(|conns| {
-                        conns.retain(|c| c.source_node_id != node_id && c.target_node_id != node_id);
+                    // Unselect the node and set deleting_node_id to trigger the shrink animation
+                    set_selected_node_id.set(None);
+                    set_deleting_node_id.set(Some(node_id));
+                    // After animation completes (200ms), remove the node
+                    spawn_local(async move {
+                        TimeoutFuture::new(200).await;
+                        set_nodes.update(|nodes| {
+                            nodes.retain(|n| n.id != node_id);
+                        });
+                        set_connections.update(|conns| {
+                            conns.retain(|c| c.source_node_id != node_id && c.target_node_id != node_id);
+                        });
+                        set_deleting_node_id.set(None);
                     });
                     set_inspector_node.set(None);
                 }))}

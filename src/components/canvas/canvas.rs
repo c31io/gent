@@ -145,17 +145,20 @@ pub fn Canvas(
                     .iter()
                     .find(|n| n.id == node_id);
 
-                // Validate port compatibility - at least one output must be compatible with one input
-                // Use get_output_ports for source node to include dynamic output ports (e.g., IfCondition branches)
+                // Validate port compatibility - the SPECIFIC ports being connected must be compatible
                 let is_compatible = source_node.and_then(|s| {
                     target_node.map(|t| {
+                        // Get the specific source port being dragged from
                         let src_output_ports = get_output_ports(&s.node_type, &s.variant);
-                        src_output_ports
+                        let src_port = src_output_ports
                             .iter()
-                            .any(|src_port| {
-                                t.ports.iter().filter(|p| p.direction == PortDirection::In)
-                                    .any(|tgt_port| ports_compatible(src_port, tgt_port))
-                            })
+                            .find(|p| p.name == dc.source_port_name);
+                        // Get the specific target port being connected to
+                        let tgt_port = t.ports.iter()
+                            .filter(|p| p.direction == PortDirection::In)
+                            .find(|p| p.name == target_port_name);
+                        // Both ports must exist and be compatible
+                        src_port.and_then(|sp| tgt_port.map(|tp| ports_compatible(sp, tp))).unwrap_or(false)
                     })
                 }).unwrap_or(false);
 
