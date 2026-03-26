@@ -101,7 +101,10 @@ fn get_nodes_by_category(category: &str) -> Vec<&'static NodeType> {
 }
 
 #[component]
-pub fn LeftPanel() -> impl IntoView {
+pub fn LeftPanel(
+    /// Callback when drag starts from palette
+    #[prop(default = None)] on_drag_start: Option<Callback<String>>,
+) -> impl IntoView {
     let categories = ["Input", "Context", "Agent", "Tool", "Control", "Output"];
 
     view! {
@@ -114,7 +117,7 @@ pub fn LeftPanel() -> impl IntoView {
                         None
                     } else {
                         Some(view! {
-                            <PaletteSection category={*category} nodes={nodes} />
+                            <PaletteSection category={*category} nodes={nodes} on_drag_start={on_drag_start} />
                         })
                     }
                 }).collect::<Vec<_>>()}
@@ -124,7 +127,12 @@ pub fn LeftPanel() -> impl IntoView {
 }
 
 #[component]
-pub fn PaletteSection(category: &'static str, nodes: Vec<&'static NodeType>) -> impl IntoView {
+pub fn PaletteSection(
+    category: &'static str,
+    nodes: Vec<&'static NodeType>,
+    /// Callback when drag starts from palette
+    #[prop(default = None)] on_drag_start: Option<Callback<String>>,
+) -> impl IntoView {
     let items: Vec<_> = nodes.iter().map(|node| {
         let node_id = node.id;
         view! {
@@ -133,12 +141,17 @@ pub fn PaletteSection(category: &'static str, nodes: Vec<&'static NodeType>) -> 
                 data-node-type={node.id}
                 title={node.description}
                 on:mousedown={move |_ev| {
+                    // Store in window for canvas to pick up
                     if let Some(window) = web_sys::window() {
                         let _ = js_sys::Reflect::set(
                             &window,
                             &"draggedNodeType".into(),
                             &node_id.into()
                         );
+                    }
+                    // Also call the callback if provided
+                    if let Some(callback) = &on_drag_start {
+                        callback.run(node_id.to_string());
                     }
                 }}
             >

@@ -183,6 +183,23 @@ html, body, #app {
   opacity: 0.5;
 }
 
+/* Drag Preview */
+.drag-preview {
+  position: fixed;
+  pointer-events: none;
+  z-index: 1000;
+  padding: 8px 12px;
+  background: var(--node-bg);
+  border: 2px dashed var(--accent-color);
+  border-radius: 8px;
+  opacity: 0.8;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+
 /* Node (DOM-based) */
 .node {
   position: absolute;

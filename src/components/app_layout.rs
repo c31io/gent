@@ -52,6 +52,16 @@ pub fn AppLayout() -> impl IntoView {
     let (deleting_node_id, set_deleting_node_id) = signal(Option::<u32>::None);
     let (next_node_id, set_next_node_id) = signal(4u32);
 
+    // Drag preview state
+    let (dragging_node_type, set_dragging_node_type) = signal(Option::<String>::None);
+    let (drag_x, set_drag_x) = signal(0.0);
+    let (drag_y, set_drag_y) = signal(0.0);
+
+    // Callback to start palette drag
+    let on_palette_drag_start: Callback<String> = Callback::new(move |node_type: String| {
+        set_dragging_node_type.set(Some(node_type));
+    });
+
     // Handle node drop from palette
     let handle_node_drop = move |node_type: String, x: f64, y: f64| {
         let node_id = next_node_id.get();
@@ -108,7 +118,19 @@ pub fn AppLayout() -> impl IntoView {
         set_dragging_right.set(true);
     };
 
-    let handle_mouse_move = move |ev: web_sys::MouseEvent| {
+    let handle_mouse_up = move |_ev: web_sys::MouseEvent| {
+        set_dragging_left.set(false);
+        set_dragging_right.set(false);
+        // Clear drag preview state
+        set_dragging_node_type.set(None);
+    };
+
+    // Global mouse move for drag preview
+    let handle_global_mousemove = move |ev: web_sys::MouseEvent| {
+        if dragging_node_type.get().is_some() {
+            set_drag_x.set(ev.client_x() as f64);
+            set_drag_y.set(ev.client_y() as f64);
+        }
         if dragging_left.get() {
             let new_width = ev.client_x();
             if new_width >= 180 && new_width <= 500 {
@@ -125,15 +147,10 @@ pub fn AppLayout() -> impl IntoView {
         }
     };
 
-    let handle_mouse_up = move |_ev: web_sys::MouseEvent| {
-        set_dragging_left.set(false);
-        set_dragging_right.set(false);
-    };
-
     view! {
         <div
             class="app-layout"
-            on:mousemove={handle_mouse_move}
+            on:mousemove={handle_global_mousemove}
             on:mouseup={handle_mouse_up}
             on:mouseleave={handle_mouse_up}
         >
@@ -143,7 +160,7 @@ pub fn AppLayout() -> impl IntoView {
                     class="panel"
                     style:width=move || format!("{}px", left_width.get())
                 >
-                    <LeftPanel />
+                    <LeftPanel on_drag_start={Some(on_palette_drag_start)} />
                 </div>
 
                 {/* Left Divider */}
@@ -185,6 +202,28 @@ pub fn AppLayout() -> impl IntoView {
                 selected_node_id={selected_node_id.into()}
                 on_delete={Callback::from(delete_node)}
             />
+
+            {/* Drag Preview */}
+            {move || {
+                if let Some(node_type) = dragging_node_type.get() {
+                    let label = NODE_TYPES
+                        .iter()
+                        .find(|n| n.id == node_type)
+                        .map(|n| n.name.to_string())
+                        .unwrap_or_else(|| node_type.clone());
+                    Some(view! {
+                        <div
+                            class="drag-preview"
+                            style:left={format!("{}px", drag_x.get())}
+                            style:top={format!("{}px", drag_y.get())}
+                        >
+                            {label}
+                        </div>
+                    })
+                } else {
+                    None
+                }
+            }}
         </div>
     }
 }
