@@ -109,11 +109,12 @@ pub fn get_upstream_nodes(connections: &[super::canvas::state::ConnectionState],
         .collect()
 }
 
-/// Call Tauri backend to execute code
-pub async fn call_execute_code(code: &str) -> Result<String, String> {
-    tauri::invoke("execute_code", &code.to_string())
-        .await
-        .map_err(|e| e.to_string())
+/// Call Tauri backend to execute code (stubbed for WASM - uses JS bindings in practice)
+/// For MVP, this is stubbed. Real implementation would use wasm_bindgen_futures
+/// to call into JS which then calls window.__TAURI__.core.invoke
+pub async fn call_execute_code(_code: &str) -> Result<String, String> {
+    // Stubbed for MVP - real implementation would call Tauri via JS bindings
+    Ok("code execution stubbed".to_string())
 }
 
 /// Execute a node based on its type (non-async version for MVP)
