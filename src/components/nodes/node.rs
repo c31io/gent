@@ -164,7 +164,7 @@ pub fn GraphNode(
     on_input_click: Option<Callback<(u32,)>>,
     on_input_reroute_start: Option<Callback<(u32,)>>,
     cancel_connection_drag: Option<Callback<(), ()>>,
-    _on_trigger: Option<Callback<u32>>,
+    on_trigger: Option<Callback<u32>>,
     _on_variant_change: Option<Callback<NodeVariant>>,
 ) -> impl IntoView {
     let class = if selected { "node selected" } else { "node" };
