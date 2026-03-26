@@ -23,6 +23,14 @@
   --node-selected: #6366f1;
   --wire-color: #a0a0a0;
 
+  /* Port Colors */
+  --port-text: #3b82f6;       /* blue */
+  --port-image: #22c55e;      /* green */
+  --port-audio: #f97316;      /* orange */
+  --port-file: #6b7280;       /* gray */
+  --port-embeddings: #a855f7; /* purple */
+  --port-trigger: #ef4444;    /* red */
+
   /* Shadows */
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.1);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.15);
@@ -611,3 +619,27 @@ html, body, #app {
     color: var(--text-primary);
     word-break: break-word;
 }
+
+/* Port color indicators */
+.port-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.port-indicator.text { background-color: var(--port-text); }
+.port-indicator.image { background-color: var(--port-image); }
+.port-indicator.audio { background-color: var(--port-audio); }
+.port-indicator.file { background-color: var(--port-file); }
+.port-indicator.embeddings { background-color: var(--port-embeddings); }
+.port-indicator.trigger { background-color: var(--port-trigger); }
+
+/* Port type indicator dots on node ports */
+.node-port.text { border-color: var(--port-text); }
+.node-port.image { border-color: var(--port-image); }
+.node-port.audio { border-color: var(--port-audio); }
+.node-port.file { border-color: var(--port-file); }
+.node-port.embeddings { border-color: var(--port-embeddings); }
+.node-port.trigger { border-color: var(--port-trigger); }
