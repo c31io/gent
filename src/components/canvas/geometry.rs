@@ -36,6 +36,23 @@ pub fn is_port(ev: &web_sys::MouseEvent) -> bool {
     false
 }
 
+/// Check if the mouse event target is the trigger button (or inside it)
+pub fn is_trigger_button(ev: &web_sys::MouseEvent) -> bool {
+    if let Some(target) = ev.target() {
+        if let Ok(element) = target.dyn_into::<web_sys::Element>() {
+            // Walk up to check if we hit a .trigger-btn
+            let mut current: Option<web_sys::Element> = Some(element);
+            while let Some(el) = current {
+                if el.class_name().contains("trigger-btn") {
+                    return true;
+                }
+                current = el.parent_element();
+            }
+        }
+    }
+    false
+}
+
 /// Get node_id from mouse event - traverses up to find the node div
 pub fn get_node_id_from_event(ev: &web_sys::MouseEvent) -> Option<u32> {
     if let Some(target) = ev.target() {

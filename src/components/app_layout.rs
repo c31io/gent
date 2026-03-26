@@ -24,34 +24,47 @@ pub fn AppLayout() -> impl IntoView {
     let (nodes, set_nodes) = signal(vec![
         NodeState {
             id: 1,
-            x: 100.0,
-            y: 100.0,
-            node_type: "user_input".to_string(),
-            label: "User Input".to_string(),
+            x: 80.0,
+            y: 150.0,
+            node_type: "trigger".to_string(),
+            label: "Trigger".to_string(),
             selected: false,
             status: NodeStatus::Pending,
         },
         NodeState {
             id: 2,
-            x: 350.0,
-            y: 80.0,
-            node_type: "template".to_string(),
-            label: "Template".to_string(),
+            x: 300.0,
+            y: 150.0,
+            node_type: "planner_agent".to_string(),
+            label: "Planner Agent".to_string(),
             selected: false,
             status: NodeStatus::Pending,
         },
         NodeState {
             id: 3,
-            x: 350.0,
-            y: 220.0,
-            node_type: "retrieval".to_string(),
-            label: "Retrieval".to_string(),
+            x: 520.0,
+            y: 150.0,
+            node_type: "web_search".to_string(),
+            label: "Web Search".to_string(),
             selected: false,
             status: NodeStatus::Pending,
         },
     ]);
 
-    let (connections, set_connections) = signal(Vec::<ConnectionState>::new());
+    let (connections, set_connections) = signal(vec![
+        ConnectionState {
+            id: 1,
+            source_node_id: 1,
+            target_node_id: 2,
+            selected: false,
+        },
+        ConnectionState {
+            id: 2,
+            source_node_id: 2,
+            target_node_id: 3,
+            selected: false,
+        },
+    ]);
     let (selected_node_id, set_selected_node_id) = signal(Option::<u32>::None);
     let (deleting_node_id, set_deleting_node_id) = signal(Option::<u32>::None);
     let (next_node_id, set_next_node_id) = signal(4u32);
