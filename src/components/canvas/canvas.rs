@@ -1,10 +1,21 @@
 use leptos::prelude::*;
+use std::collections::HashMap;
 use wasm_bindgen::JsCast;
 
 use crate::components::canvas::geometry::{find_input_port_at, get_node_id_from_event, is_port, is_trigger_button};
-use crate::components::canvas::state::{ConnectionState, DraggingConnection, NodeState};
+use crate::components::canvas::state::{ConnectionState, DraggingConnection, NodeState, Port, PortDirection, PortType, get_output_ports, compute_port_offsets, get_port_canvas_position};
 use crate::components::canvas::wires::draw_connections;
 use crate::components::nodes::node::GraphNode;
+
+/// Check if two ports are compatible for connection
+fn ports_compatible(source: &Port, target: &Port) -> bool {
+    // Trigger ports only connect to other trigger ports
+    if source.port_type == PortType::Trigger || target.port_type == PortType::Trigger {
+        return source.port_type == target.port_type;
+    }
+    // All other port types can connect to each other
+    true
+}
 
 /// Canvas for rendering nodes with pan/zoom
 #[component]
@@ -75,25 +86,45 @@ pub fn Canvas(
         set_pan_y.set(0.0);
     };
 
-    // Get port center position relative to canvas
-    let get_port_center = move |node_id: u32, port_type: &str| -> (f64, f64) {
-        let nodes_snapshot = nodes.get();
-        if let Some(node) = nodes_snapshot.iter().find(|n| n.id == node_id) {
-            let port_offset_x = if port_type == "output" { 150.0 } else { 0.0 };
-            let port_offset_y = 35.0;
-            let x = node.x + port_offset_x;
-            let y = node.y + port_offset_y;
-            (x, y)
-        } else {
-            (0.0, 0.0)
+    // Compute port positions as a memoized HashMap keyed by (node_id, port_name)
+    let port_positions = Memo::new(move |_| {
+        let nodes = nodes.get();
+        let mut positions: HashMap<(u32, String), (f64, f64)> = HashMap::new();
+        for node in &nodes {
+            let input_ports: Vec<_> = node.ports.iter()
+                .filter(|p| p.direction == PortDirection::In)
+                .cloned()
+                .collect();
+            let output_ports = get_output_ports(&node.node_type, &node.variant);
+            let all_ports: Vec<_> = input_ports.into_iter()
+                .chain(output_ports.into_iter())
+                .collect();
+            let ports_with_offsets = compute_port_offsets(&all_ports);
+            for pwo in &ports_with_offsets {
+                let (x, y) = get_port_canvas_position(
+                    node.x,
+                    node.y,
+                    pwo.port.direction.clone(),
+                    pwo.top_offset,
+                );
+                positions.insert((node.id, pwo.port.name.clone()), (x, y));
+            }
         }
+        positions
+    });
+
+    // Get port center position from memo
+    let get_port_center = move |node_id: u32, port_name: &str| -> (f64, f64) {
+        port_positions.get().get(&(node_id, port_name.to_string())).copied()
+            .unwrap_or((0.0, 0.0))
     };
 
     // Port drag handlers
-    let handle_output_drag_start = move |node_id: u32, _mouse_x: f64, _mouse_y: f64| {
-        let (sx, sy) = get_port_center(node_id, "output");
+    let handle_output_drag_start = move |node_id: u32, port_name: String, _mouse_x: f64, _mouse_y: f64| {
+        let (sx, sy) = get_port_center(node_id, &port_name);
         set_dragging_connection.set(Some(DraggingConnection {
             source_node_id: node_id,
+            source_port_name: port_name.clone(),
             source_input_node_id: None,
             current_x: sx,
             current_y: sy,
@@ -101,9 +132,40 @@ pub fn Canvas(
         }));
     };
 
-    let handle_input_drag_end = move |node_id: u32, _x: f64, _y: f64| {
+    let handle_input_drag_end = move |node_id: u32, target_port_name: String, _x: f64, _y: f64| {
         if let Some(dc) = dragging_connection.get() {
             if dc.source_node_id != node_id {
+                // Get source and target nodes
+                let all_nodes = nodes.get();
+                let source_node = all_nodes
+                    .iter()
+                    .find(|n| n.id == dc.source_node_id);
+
+                let target_node = all_nodes
+                    .iter()
+                    .find(|n| n.id == node_id);
+
+                // Validate port compatibility - at least one output must be compatible with one input
+                // Use get_output_ports for source node to include dynamic output ports (e.g., IfCondition branches)
+                let is_compatible = source_node.and_then(|s| {
+                    target_node.map(|t| {
+                        let src_output_ports = get_output_ports(&s.node_type, &s.variant);
+                        src_output_ports
+                            .iter()
+                            .any(|src_port| {
+                                t.ports.iter().filter(|p| p.direction == PortDirection::In)
+                                    .any(|tgt_port| ports_compatible(src_port, tgt_port))
+                            })
+                    })
+                }).unwrap_or(false);
+
+                if !is_compatible {
+                    // Invalid connection - cancel the drag
+                    set_dragging_connection.set(None);
+                    set_rerouting_from.set(None);
+                    return;
+                }
+
                 if let Some(src_input) = dc.source_input_node_id {
                     set_connections.update(|c: &mut Vec<ConnectionState>| c.retain(|conn|
                         !(conn.source_node_id == dc.source_node_id && conn.target_node_id == src_input)
@@ -113,7 +175,9 @@ pub fn Canvas(
                 let new_conn = ConnectionState {
                     id: next_connection_id.get(),
                     source_node_id: dc.source_node_id,
+                    source_port_name: dc.source_port_name.clone(),
                     target_node_id: node_id,
+                    target_port_name,
                     selected: false,
                 };
                 set_connections.update(|c: &mut Vec<ConnectionState>| c.push(new_conn));
@@ -129,16 +193,19 @@ pub fn Canvas(
     });
 
     let handle_input_reroute_start: Callback<(u32,)> = Callback::new(move |args: (u32,)| {
-        let source_node_id = connections.get()
+        let all_connections = connections.get();
+        let existing_conn = all_connections
             .iter()
-            .find(|c| c.target_node_id == args.0)
-            .map(|c| c.source_node_id);
+            .find(|c| c.target_node_id == args.0);
 
-        if let Some(src_id) = source_node_id {
-            let (sx, sy) = get_port_center(src_id, "output");
+        if let Some(conn) = existing_conn {
+            let src_id = conn.source_node_id;
+            let src_port_name = conn.source_port_name.clone();
+            let (sx, sy) = get_port_center(src_id, &src_port_name);
             set_rerouting_from.set(Some(args.0));
             set_dragging_connection.set(Some(DraggingConnection {
                 source_node_id: src_id,
+                source_port_name: src_port_name,
                 source_input_node_id: Some(args.0),
                 current_x: sx,
                 current_y: sy,
@@ -467,12 +534,14 @@ pub fn Canvas(
         let dragging = dragging_connection.get();
         let rerouting = rerouting_from.get();
         let nodes = nodes.get();
+        let port_pos = port_positions.get();
         draw_connections(
             &ctx,
             &connections,
             &dragging,
             rerouting,
             &nodes,
+            &port_pos,
             pan_x.get(),
             pan_y.get(),
             zoom.get(),
@@ -512,7 +581,11 @@ pub fn Canvas(
                         let has_connection = connections_snapshot.iter().any(|c| c.target_node_id == node.id);
                         let is_selected = selected == Some(node.id);
                         let is_deleting = deleting == Some(node.id);
-                        let is_trigger = node.node_type == "trigger";
+                        // Get input ports from node.ports (static), output ports from get_output_ports (dynamic)
+                        let input_ports = node.ports.iter().filter(|p| p.direction == PortDirection::In).cloned().collect::<Vec<_>>();
+                        let output_ports = get_output_ports(&node.node_type, &node.variant);
+                        let all_ports: Vec<Port> = input_ports.into_iter().chain(output_ports.into_iter()).collect();
+                        let combined_ports = compute_port_offsets(&all_ports);
                         view! {
                             <GraphNode
                                 x={node.x}
@@ -520,9 +593,10 @@ pub fn Canvas(
                                 label={node.label.clone()}
                                 selected={is_selected}
                                 node_id={node.id}
+                                variant={node.variant.clone()}
+                                ports={combined_ports}
                                 has_input_connection={has_connection}
                                 is_deleting={is_deleting}
-                                is_trigger={is_trigger}
                                 on_output_drag_start={Some(Callback::from(handle_output_drag_start))}
                                 on_input_drag_end={Some(Callback::from(handle_input_drag_end))}
                                 on_input_click={Some(handle_input_click)}
