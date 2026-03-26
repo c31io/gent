@@ -140,6 +140,29 @@ pub fn default_ports_for_type(node_type: &str) -> Vec<Port> {
     }
 }
 
+/// Returns output ports including dynamic ones based on variant state
+pub fn get_output_ports(node_type: &str, variant: &NodeVariant) -> Vec<Port> {
+    let mut ports = default_ports_for_type(node_type)
+        .into_iter()
+        .filter(|p| p.direction == PortDirection::Out)
+        .collect::<Vec<_>>();
+
+    // Add dynamic output ports for IfCondition based on branches
+    if let NodeVariant::IfCondition { branches } = variant {
+        for i in 0..*branches {
+            ports.push(Port {
+                name: format!("branch_{}", i + 1),
+                port_type: PortType::Trigger,
+                direction: PortDirection::Out,
+            });
+        }
+    }
+
+    // TODO: Add dynamic output ports for Loop based on iterations if needed
+
+    ports
+}
+
 /// Returns default NodeVariant for a given node_type string
 pub fn default_variant_for_type(node_type: &str) -> NodeVariant {
     match node_type {

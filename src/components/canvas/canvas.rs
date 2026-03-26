@@ -2,7 +2,7 @@ use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
 use crate::components::canvas::geometry::{find_input_port_at, get_node_id_from_event, is_port, is_trigger_button};
-use crate::components::canvas::state::{ConnectionState, DraggingConnection, NodeState, NodeVariant, Port, PortDirection, PortType, default_ports_for_type, default_variant_for_type};
+use crate::components::canvas::state::{ConnectionState, DraggingConnection, NodeState, Port, PortDirection, PortType, get_output_ports};
 use crate::components::canvas::wires::draw_connections;
 use crate::components::nodes::node::GraphNode;
 
@@ -125,9 +125,12 @@ pub fn Canvas(
                     .find(|n| n.id == node_id);
 
                 // Validate port compatibility - at least one output must be compatible with one input
+                // Use get_output_ports for source node to include dynamic output ports (e.g., IfCondition branches)
                 let is_compatible = source_node.and_then(|s| {
                     target_node.map(|t| {
-                        s.ports.iter().filter(|p| p.direction == PortDirection::Out)
+                        let src_output_ports = get_output_ports(&s.node_type, &s.variant);
+                        src_output_ports
+                            .iter()
                             .any(|src_port| {
                                 t.ports.iter().filter(|p| p.direction == PortDirection::In)
                                     .any(|tgt_port| ports_compatible(src_port, tgt_port))
@@ -550,6 +553,10 @@ pub fn Canvas(
                         let has_connection = connections_snapshot.iter().any(|c| c.target_node_id == node.id);
                         let is_selected = selected == Some(node.id);
                         let is_deleting = deleting == Some(node.id);
+                        // Get input ports from node.ports (static), output ports from get_output_ports (dynamic)
+                        let input_ports = node.ports.iter().filter(|p| p.direction == PortDirection::In).cloned().collect::<Vec<_>>();
+                        let output_ports = get_output_ports(&node.node_type, &node.variant);
+                        let combined_ports = input_ports.into_iter().chain(output_ports.into_iter()).collect::<Vec<_>>();
                         view! {
                             <GraphNode
                                 x={node.x}
@@ -558,7 +565,7 @@ pub fn Canvas(
                                 selected={is_selected}
                                 node_id={node.id}
                                 variant={node.variant.clone()}
-                                ports={node.ports.clone()}
+                                ports={combined_ports}
                                 has_input_connection={has_connection}
                                 is_deleting={is_deleting}
                                 on_output_drag_start={Some(Callback::from(handle_output_drag_start))}
