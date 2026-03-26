@@ -491,3 +491,99 @@ html, body, #app {
 .config-input::placeholder {
   color: var(--text-secondary);
 }
+
+/* Execution Trace */
+.execution-trace {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.trace-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+.trace-empty {
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.trace-thread {
+    margin-bottom: 12px;
+    border-left: 2px solid var(--border-color);
+    padding-left: 8px;
+}
+
+.trace-task-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 0;
+}
+
+.trace-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.status-pending .trace-status-dot { background: #888; }
+.status-running .trace-status-dot { background: #3498db; animation: pulse 1s infinite; }
+.status-waiting .trace-status-dot { background: #f39c12; }
+.status-complete .trace-status-dot { background: #2ecc71; }
+.status-error .trace-status-dot { background: #e74c3c; }
+
+.status-running .trace-status-dot {
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.trace-node-type {
+    text-transform: capitalize;
+}
+
+.trace-duration {
+    margin-left: auto;
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+
+.trace-messages {
+    margin-left: 16px;
+    border-left: 1px solid var(--border-subtle);
+    padding-left: 8px;
+}
+
+.trace-message {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: 11px;
+    padding: 2px 0;
+    color: var(--text-secondary);
+}
+
+.trace-ts {
+    color: var(--text-tertiary);
+    font-family: monospace;
+    font-size: 10px;
+}
+
+.trace-emoji {
+    font-size: 10px;
+}
+
+.trace-msg-text {
+    color: var(--text-primary);
+    word-break: break-word;
+}
