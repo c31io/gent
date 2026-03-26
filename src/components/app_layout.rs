@@ -94,9 +94,9 @@ pub fn AppLayout() -> impl IntoView {
             // Add trigger task
             let mut trigger_task = crate::components::execution_engine::Task::new(node_id, "trigger", None);
             trigger_task.status = crate::components::execution_engine::TaskStatus::Running;
-            trigger_task.started_at = Some(std::time::Instant::now());
+            trigger_task.started_at = Some(crate::components::execution_engine::Timestamp::now());
             trigger_task.add_message("Trigger fired", crate::components::execution_engine::TraceLevel::Info);
-            trigger_task.finished_at = Some(std::time::Instant::now());
+            trigger_task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
             trigger_task.status = crate::components::execution_engine::TaskStatus::Complete;
             exec.tasks.push(trigger_task);
 
@@ -105,7 +105,7 @@ pub fn AppLayout() -> impl IntoView {
                 if let Some(node) = nodes_snapshot.iter().find(|n| n.id == downstream_id) {
                     let mut task = crate::components::execution_engine::Task::new(downstream_id, &node.node_type, None);
                     task.status = crate::components::execution_engine::TaskStatus::Running;
-                    task.started_at = Some(std::time::Instant::now());
+                    task.started_at = Some(crate::components::execution_engine::Timestamp::now());
                     task.add_message(&format!("Executing {}...", node.label), crate::components::execution_engine::TraceLevel::Info);
 
                     // Simple synchronous execution for MVP (no actual async)
@@ -121,7 +121,7 @@ pub fn AppLayout() -> impl IntoView {
                         Some("ok".to_string())
                     };
 
-                    task.finished_at = Some(std::time::Instant::now());
+                    task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
                     task.status = crate::components::execution_engine::TaskStatus::Complete;
                     task.result = result;
                     exec.tasks.push(task);

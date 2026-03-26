@@ -1,6 +1,22 @@
-use leptos::prelude::*;
 use std::collections::HashMap;
-use std::time::Instant;
+
+/// WASM-compatible timestamp using js_sys::Date
+#[derive(Clone, Copy, Debug)]
+pub struct Timestamp(u64);
+
+impl Timestamp {
+    pub fn now() -> Self {
+        Self(js_sys::Date::now() as u64)
+    }
+
+    pub fn elapsed(&self) -> std::time::Duration {
+        std::time::Duration::from_millis(js_sys::Date::now() as u64 - self.0)
+    }
+
+    pub fn duration_since(&self, earlier: Timestamp) -> std::time::Duration {
+        std::time::Duration::from_millis(self.0 - earlier.0)
+    }
+}
 
 /// Trace level for styling
 #[derive(Clone, Debug)]
@@ -14,7 +30,7 @@ pub enum TraceLevel {
 /// A single entry in the execution trace
 #[derive(Clone, Debug)]
 pub struct TraceEntry {
-    pub timestamp: Instant,
+    pub timestamp: Timestamp,
     pub message: String,
     pub level: TraceLevel,
 }
@@ -22,7 +38,7 @@ pub struct TraceEntry {
 impl TraceEntry {
     pub fn new(message: &str, level: TraceLevel) -> Self {
         Self {
-            timestamp: Instant::now(),
+            timestamp: Timestamp::now(),
             message: message.to_string(),
             level,
         }
@@ -46,8 +62,8 @@ pub struct Task {
     pub node_id: u32,
     pub node_type: String,
     pub status: TaskStatus,
-    pub started_at: Option<Instant>,
-    pub finished_at: Option<Instant>,
+    pub started_at: Option<Timestamp>,
+    pub finished_at: Option<Timestamp>,
     pub parent_id: Option<String>,
     pub messages: Vec<TraceEntry>,
     pub result: Option<String>,
@@ -125,7 +141,7 @@ pub fn execute_node_sync(
 ) -> (Task, Option<String>) {
     let mut task = Task::new(node.id, &node.node_type, parent_id);
     task.status = TaskStatus::Running;
-    task.started_at = Some(Instant::now());
+    task.started_at = Some(Timestamp::now());
 
     let result = match node.node_type.as_str() {
         "trigger" => {
@@ -169,7 +185,7 @@ pub fn execute_node_sync(
     };
 
     task.status = TaskStatus::Complete;
-    task.finished_at = Some(Instant::now());
+    task.finished_at = Some(Timestamp::now());
     if let Some(ref r) = result {
         task.result = Some(r.clone());
     }
