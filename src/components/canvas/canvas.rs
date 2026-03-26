@@ -2,7 +2,7 @@ use leptos::prelude::*;
 use std::collections::HashMap;
 use wasm_bindgen::JsCast;
 
-use crate::components::canvas::geometry::{find_input_port_at, get_node_id_from_event, is_port, is_trigger_button};
+use crate::components::canvas::geometry::{find_input_port_at, get_node_id_from_event, is_port, is_text_input, is_trigger_button};
 use crate::components::canvas::state::{ConnectionState, DraggingConnection, NodeState, Port, PortDirection, PortType, get_output_ports, compute_port_offsets, get_port_canvas_position};
 use crate::components::canvas::wires::draw_connections;
 use crate::components::nodes::node::GraphNode;
@@ -241,14 +241,14 @@ pub fn Canvas(
                 let canvas_x = (ev.client_x() as f64 - canvas_offset_x - pan) / zoom_val;
                 let canvas_y = (ev.client_y() as f64 - canvas_offset_y - pan_y_val) / zoom_val;
 
+                // Check if this is a trigger button click or text input - if so, don't select or drag
+                if is_trigger_button(&ev) || is_text_input(&ev) {
+                    return;
+                }
+
                 set_selected_node_id.set(Some(node_id));
                 if let Some(callback) = on_selection_change {
                     callback.run(Some(node_id));
-                }
-
-                // Check if this is a trigger button click - if so, don't drag (button handles trigger)
-                if is_trigger_button(&ev) {
-                    return;
                 }
 
                 let nodes_snapshot = nodes.get();

@@ -34,6 +34,24 @@ pub fn is_port(ev: &web_sys::MouseEvent) -> bool {
     false
 }
 
+/// Check if the mouse event target is a text input or textarea (or inside it)
+pub fn is_text_input(ev: &web_sys::MouseEvent) -> bool {
+    if let Some(target) = ev.target() {
+        if let Ok(element) = target.dyn_into::<web_sys::Element>() {
+            // Walk up to check if we hit a text input or textarea
+            let mut current: Option<web_sys::Element> = Some(element);
+            while let Some(el) = current {
+                let class_name = el.class_name();
+                if class_name.contains("node-variant-input") || class_name.contains("node-variant-textarea") {
+                    return true;
+                }
+                current = el.parent_element();
+            }
+        }
+    }
+    false
+}
+
 /// Check if the mouse event target is the trigger button (or inside it)
 pub fn is_trigger_button(ev: &web_sys::MouseEvent) -> bool {
     if let Some(target) = ev.target() {
