@@ -2,7 +2,7 @@ use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
 use crate::components::canvas::geometry::{find_input_port_at, get_node_id_from_event, is_port, is_trigger_button};
-use crate::components::canvas::state::{ConnectionState, DraggingConnection, NodeState};
+use crate::components::canvas::state::{ConnectionState, DraggingConnection, NodeState, NodeVariant, Port, PortDirection, PortType, default_ports_for_type, default_variant_for_type};
 use crate::components::canvas::wires::draw_connections;
 use crate::components::nodes::node::GraphNode;
 
@@ -512,7 +512,6 @@ pub fn Canvas(
                         let has_connection = connections_snapshot.iter().any(|c| c.target_node_id == node.id);
                         let is_selected = selected == Some(node.id);
                         let is_deleting = deleting == Some(node.id);
-                        let is_trigger = node.node_type == "trigger";
                         view! {
                             <GraphNode
                                 x={node.x}
@@ -520,9 +519,10 @@ pub fn Canvas(
                                 label={node.label.clone()}
                                 selected={is_selected}
                                 node_id={node.id}
+                                variant={node.variant.clone()}
+                                ports={node.ports.clone()}
                                 has_input_connection={has_connection}
                                 is_deleting={is_deleting}
-                                is_trigger={is_trigger}
                                 on_output_drag_start={Some(Callback::from(handle_output_drag_start))}
                                 on_input_drag_end={Some(Callback::from(handle_input_drag_end))}
                                 on_input_click={Some(handle_input_click)}
