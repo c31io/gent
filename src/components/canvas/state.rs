@@ -210,8 +210,8 @@ pub fn compute_port_offsets(ports: &[Port]) -> Vec<PortWithOffset> {
     result
 }
 
-/// Reference node width (px) for port position calculations
-pub const REFERENCE_NODE_WIDTH: f64 = 160.0;
+/// Node width (px) for port position calculations
+pub const NODE_WIDTH: f64 = 160.0;
 
 /// Port element radius (half of 10px width/height)
 const PORT_RADIUS: f64 = 5.0;
@@ -225,8 +225,8 @@ pub fn get_port_canvas_position(
     top_offset: f64,
 ) -> (f64, f64) {
     let x = match direction {
-        PortDirection::In => node_x - PORT_RADIUS,
-        PortDirection::Out => node_x + REFERENCE_NODE_WIDTH - PORT_RADIUS,
+        PortDirection::In => node_x,
+        PortDirection::Out => node_x + NODE_WIDTH,
     };
     // top_offset is already a pixel value from node top, add PORT_RADIUS for center
     let y = node_y + top_offset + PORT_RADIUS;
