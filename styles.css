@@ -101,6 +101,8 @@ html, body, #app {
   color: var(--text-secondary);
   background: var(--bg-tertiary);
   flex-shrink: 0;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .panel-content {
@@ -150,6 +152,8 @@ html, body, #app {
   text-transform: uppercase;
   margin-bottom: 8px;
   padding: 0 4px;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .palette-items {
