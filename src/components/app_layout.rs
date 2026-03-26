@@ -2,7 +2,7 @@ use leptos::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use gloo_timers::future::TimeoutFuture;
 
-use crate::components::canvas::state::{ConnectionState, NodeState};
+use crate::components::canvas::state::{ConnectionState, NodeState, NodeStatus};
 use crate::components::canvas::Canvas;
 use crate::components::left_panel::{LeftPanel, NODE_TYPES};
 use crate::components::node_inspector::NodeInspector;
@@ -28,6 +28,7 @@ pub fn AppLayout() -> impl IntoView {
             node_type: "user_input".to_string(),
             label: "User Input".to_string(),
             selected: false,
+            status: NodeStatus::Pending,
         },
         NodeState {
             id: 2,
@@ -36,6 +37,7 @@ pub fn AppLayout() -> impl IntoView {
             node_type: "template".to_string(),
             label: "Template".to_string(),
             selected: false,
+            status: NodeStatus::Pending,
         },
         NodeState {
             id: 3,
@@ -44,6 +46,7 @@ pub fn AppLayout() -> impl IntoView {
             node_type: "retrieval".to_string(),
             label: "Retrieval".to_string(),
             selected: false,
+            status: NodeStatus::Pending,
         },
     ]);
 
@@ -79,6 +82,7 @@ pub fn AppLayout() -> impl IntoView {
             node_type: node_type.clone(),
             label,
             selected: false,
+            status: NodeStatus::Pending,
         };
 
         set_nodes.update(|nodes: &mut Vec<NodeState>| nodes.push(new_node));
