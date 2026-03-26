@@ -1,7 +1,7 @@
+use std::collections::HashMap;
 use wasm_bindgen::JsValue;
 use wasm_bindgen::UnwrapThrowExt;
 
-use crate::components::canvas::geometry::get_port_center_static;
 use crate::components::canvas::state::{ConnectionState, DraggingConnection, NodeState};
 
 /// Draw a bezier wire on the canvas context
@@ -38,6 +38,7 @@ pub fn draw_connections(
     dragging: &Option<DraggingConnection>,
     rerouting_from: Option<u32>,
     nodes: &[NodeState],
+    port_positions: &HashMap<(u32, String), (f64, f64)>,
     pan_x: f64,
     pan_y: f64,
     zoom: f64,
@@ -52,8 +53,8 @@ pub fn draw_connections(
 
     // Draw established connections
     for conn in connections {
-        let (sx, sy) = get_port_center_static(conn.source_node_id, "output", nodes);
-        let (ex, ey) = get_port_center_static(conn.target_node_id, "input", nodes);
+        let (sx, sy) = port_positions.get(&(conn.source_node_id, conn.source_port_name.clone())).copied().unwrap_or((0.0, 0.0));
+        let (ex, ey) = port_positions.get(&(conn.target_node_id, conn.target_port_name.clone())).copied().unwrap_or((0.0, 0.0));
         let dimmed = rerouting_from == Some(conn.target_node_id);
         draw_bezier(ctx, sx, sy, ex, ey, conn.selected, dimmed);
     }
@@ -61,7 +62,7 @@ pub fn draw_connections(
     // Draw preview connection while dragging
     if let Some(ref dc) = dragging {
         if dc.is_dragging {
-            let (sx, sy) = get_port_center_static(dc.source_node_id, "output", nodes);
+            let (sx, sy) = port_positions.get(&(dc.source_node_id, dc.source_port_name.clone())).copied().unwrap_or((0.0, 0.0));
             draw_bezier(ctx, sx, sy, dc.current_x, dc.current_y, false, false);
         }
     }

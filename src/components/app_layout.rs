@@ -2,7 +2,7 @@ use leptos::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use gloo_timers::future::TimeoutFuture;
 
-use crate::components::canvas::state::{ConnectionState, NodeState, NodeStatus};
+use crate::components::canvas::state::{ConnectionState, NodeState, NodeStatus, default_ports_for_type, default_variant_for_type};
 use crate::components::canvas::Canvas;
 use crate::components::execution_engine::{ExecutionState, get_downstream_nodes};
 use crate::components::execution_trace::ExecutionTrace;
@@ -30,24 +30,30 @@ pub fn AppLayout() -> impl IntoView {
             label: "Trigger".to_string(),
             selected: false,
             status: NodeStatus::Pending,
+            variant: default_variant_for_type("trigger"),
+            ports: default_ports_for_type("trigger"),
         },
         NodeState {
             id: 2,
             x: 300.0,
             y: 150.0,
-            node_type: "planner_agent".to_string(),
-            label: "Planner Agent".to_string(),
+            node_type: "user_input".to_string(),
+            label: "User Input".to_string(),
             selected: false,
             status: NodeStatus::Pending,
+            variant: default_variant_for_type("user_input"),
+            ports: default_ports_for_type("user_input"),
         },
         NodeState {
             id: 3,
             x: 520.0,
             y: 150.0,
-            node_type: "web_search".to_string(),
-            label: "Web Search".to_string(),
+            node_type: "chat_output".to_string(),
+            label: "Chat Response".to_string(),
             selected: false,
             status: NodeStatus::Pending,
+            variant: default_variant_for_type("chat_output"),
+            ports: default_ports_for_type("chat_output"),
         },
     ]);
 
@@ -55,19 +61,26 @@ pub fn AppLayout() -> impl IntoView {
         ConnectionState {
             id: 1,
             source_node_id: 1,
+            source_port_name: "output".to_string(),
             target_node_id: 2,
+            target_port_name: "trigger".to_string(),
             selected: false,
         },
         ConnectionState {
             id: 2,
             source_node_id: 2,
+            source_port_name: "output".to_string(),
             target_node_id: 3,
+            target_port_name: "response".to_string(),
             selected: false,
         },
     ]);
     let (selected_node_id, set_selected_node_id) = signal(Option::<u32>::None);
     let (deleting_node_id, set_deleting_node_id) = signal(Option::<u32>::None);
     let (next_node_id, set_next_node_id) = signal(4u32);
+
+    // Inspector state for selected node
+    let (inspector_node, set_inspector_node) = signal(Option::<NodeState>::None);
 
     // Drag preview state
     let (dragging_node_type, set_dragging_node_type) = signal(Option::<String>::None);
@@ -156,33 +169,13 @@ pub fn AppLayout() -> impl IntoView {
             label,
             selected: false,
             status: NodeStatus::Pending,
+            variant: default_variant_for_type(&node_type),
+            ports: default_ports_for_type(&node_type),
         };
 
         set_nodes.update(|nodes: &mut Vec<NodeState>| nodes.push(new_node));
         set_next_node_id.update(|n| *n += 1);
         set_selected_node_id.set(Some(node_id));
-    };
-
-    // Delete node handler - animates shrink then removes node
-    let delete_node = move |node_id: u32| {
-        // First unselect to prevent flash to next node
-        set_selected_node_id.set(None);
-
-        // Then set deleting node to trigger shrink animation
-        set_deleting_node_id.set(Some(node_id));
-
-        // After animation completes, remove the node
-        let nodes_to_delete = node_id;
-        let connections_to_delete = node_id;
-
-        spawn_local(async move {
-            TimeoutFuture::new(300).await;
-            set_nodes.update(|n: &mut Vec<NodeState>| n.retain(|node| node.id != nodes_to_delete));
-            set_connections.update(|c: &mut Vec<ConnectionState>| c.retain(|conn| {
-                conn.source_node_id != connections_to_delete && conn.target_node_id != connections_to_delete
-            }));
-            set_deleting_node_id.set(None);
-        });
     };
 
     let handle_left_divider_mouse_down = move |ev: web_sys::MouseEvent| {
@@ -262,6 +255,16 @@ pub fn AppLayout() -> impl IntoView {
                     on_node_drop={Some(Callback::from(handle_node_drop))}
                     left_width={Some(left_width.into())}
                     on_trigger={Some(Callback::new(handle_trigger))}
+                    on_selection_change={Some(Callback::new(move |node_id| {
+                        if let Some(id) = node_id {
+                            let nodes_snapshot = nodes.get();
+                            if let Some(node) = nodes_snapshot.iter().find(|n| n.id == id) {
+                                set_inspector_node.set(Some(node.clone()));
+                            }
+                        } else {
+                            set_inspector_node.set(None);
+                        }
+                    }))}
                 />
 
                 {/* Right Divider */}
@@ -281,9 +284,19 @@ pub fn AppLayout() -> impl IntoView {
 
             {/* Node Inspector Drawer */}
             <NodeInspector
-                nodes={nodes.into()}
-                selected_node_id={selected_node_id.into()}
-                on_delete={Callback::from(delete_node)}
+                selected_node={inspector_node.into()}
+                on_node_delete={Some(Callback::new(move |node_id| {
+                    set_nodes.update(|nodes| {
+                        nodes.retain(|n| n.id != node_id);
+                    });
+                    set_connections.update(|conns| {
+                        conns.retain(|c| c.source_node_id != node_id && c.target_node_id != node_id);
+                    });
+                    set_inspector_node.set(None);
+                }))}
+                on_close={Some(Callback::new(move |_| {
+                    set_inspector_node.set(None);
+                }))}
             />
 
             {/* Drag Preview */}
