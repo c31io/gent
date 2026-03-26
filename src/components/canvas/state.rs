@@ -99,7 +99,10 @@ pub struct DraggingConnection {
 /// Returns default ports for a given node_type string
 pub fn default_ports_for_type(node_type: &str) -> Vec<Port> {
     match node_type {
-        "user_input" => vec![Port { name: "output".into(), port_type: PortType::Text, direction: PortDirection::Out }],
+        "user_input" => vec![
+            Port { name: "trigger".into(), port_type: PortType::Trigger, direction: PortDirection::In },
+            Port { name: "output".into(), port_type: PortType::Text, direction: PortDirection::Out },
+        ],
         "file_input" => vec![Port { name: "output".into(), port_type: PortType::File, direction: PortDirection::Out }],
         "trigger" => vec![Port { name: "output".into(), port_type: PortType::Trigger, direction: PortDirection::Out }],
         "template" => vec![
