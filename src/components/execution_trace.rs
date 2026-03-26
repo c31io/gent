@@ -1,5 +1,5 @@
 use leptos::prelude::*;
-use crate::components::execution_engine::{ExecutionState, TraceLevel};
+use crate::components::execution_engine::{ExecutionState, TraceLevel, Timestamp};
 
 /// Format duration in milliseconds
 fn format_duration(ms: u128) -> String {
@@ -11,8 +11,8 @@ fn format_duration(ms: u128) -> String {
 }
 
 /// Format timestamp as HH:MM:SS.mmm
-fn format_timestamp(instant: std::time::Instant) -> String {
-    let elapsed = instant.elapsed().as_millis();
+fn format_timestamp(ts: Timestamp) -> String {
+    let elapsed = ts.elapsed().as_millis();
     let secs = (elapsed / 1000) % 60;
     let mins = (elapsed / 60000) % 60;
     let hours = elapsed / 3600000;
