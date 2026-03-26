@@ -528,11 +528,7 @@ pub fn Canvas(
                                 on_input_click={Some(handle_input_click)}
                                 on_input_reroute_start={Some(Callback::from(handle_input_reroute_start))}
                                 cancel_connection_drag={Some(cancel_connection_drag)}
-                                on_trigger={if is_trigger { Some(Callback::new(move |id| {
-                                    if let Some(cb) = &on_trigger {
-                                        cb.run(id);
-                                    }
-                                }))} else { None }}
+                                on_trigger={on_trigger}
                             />
                         }
                     }).collect::<Vec<_>>()
