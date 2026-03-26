@@ -37,6 +37,8 @@ pub fn Canvas(
     #[prop(default = None)] on_node_drop: Option<Callback<(String, f64, f64)>>,
     /// Left panel width signal (for calculating canvas offset)
     #[prop(default = None)] left_width: Option<Signal<i32>>,
+    /// Right panel width signal (for canvas redraw on resize)
+    #[prop(default = None)] right_width: Option<Signal<i32>>,
     /// Callback when trigger node is clicked
     #[prop(default = None)] on_trigger: Option<Callback<u32>>,
 ) -> impl IntoView {
@@ -498,8 +500,16 @@ pub fn Canvas(
         )
     };
 
-    // Canvas redraw effect
+    // Track both panel widths for redraw
+    let left_w = left_width;
+    let right_w = right_width;
+
+    // Canvas redraw effect - track panel widths and window resize to redraw after any resize
     Effect::new(move |_| {
+        // Track both panel widths so Effect re-runs after panel resize
+        let _lw = left_w.get();
+        let _rw = right_w.get();
+
         let window = match web_sys::window() {
             Some(w) => w,
             None => return,
@@ -549,6 +559,27 @@ pub fn Canvas(
             pan_y.get(),
             zoom.get(),
         );
+
+        // Debounced resize handler to avoid excessive redraws
+        use gloo_timers::callback::Timeout;
+        use std::cell::RefCell;
+        static RESIZE_LISTENER_ADDED: std::sync::Once = std::sync::Once::new();
+        let resize_timeout: RefCell<Option<Timeout>> = RefCell::new(None);
+        let closure = wasm_bindgen::closure::Closure::wrap(Box::new(move |_ev: web_sys::Event| {
+            // Clear existing timeout
+            resize_timeout.borrow_mut().take();
+            // Set new timeout to debounce resize events
+            let pan_x_clone = pan_x.clone();
+            let set_pan_x_clone = set_pan_x.clone();
+            *resize_timeout.borrow_mut() = Some(Timeout::new(10, move || {
+                let current = pan_x_clone.get();
+                set_pan_x_clone.set(current);
+            }));
+        }) as Box<dyn Fn(_)>);
+        RESIZE_LISTENER_ADDED.call_once(|| {
+            window.add_event_listener_with_callback("resize", closure.as_ref().unchecked_ref()).ok();
+        });
+        closure.forget();
     });
 
     view! {
