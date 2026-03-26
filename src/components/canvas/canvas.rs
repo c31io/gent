@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
-use crate::components::canvas::geometry::{find_input_port_at, get_node_id_from_event, is_port};
+use crate::components::canvas::geometry::{find_input_port_at, get_node_id_from_event, is_port, is_trigger_button};
 use crate::components::canvas::state::{ConnectionState, DraggingConnection, NodeState};
 use crate::components::canvas::wires::draw_connections;
 use crate::components::nodes::node::GraphNode;
@@ -174,17 +174,12 @@ pub fn Canvas(
                     callback.run(Some(node_id));
                 }
 
-                // Check if this is a trigger node - fire and don't drag
-                let nodes_snapshot = nodes.get();
-                if let Some(node) = nodes_snapshot.iter().find(|n| n.id == node_id) {
-                    if node.node_type == "trigger" {
-                        if let Some(callback) = &on_trigger {
-                            callback.run(node_id);
-                        }
-                        return;  // Don't start dragging for trigger nodes
-                    }
+                // Check if this is a trigger button click - if so, don't drag (button handles trigger)
+                if is_trigger_button(&ev) {
+                    return;
                 }
 
+                let nodes_snapshot = nodes.get();
                 if let Some(node) = nodes_snapshot.iter().find(|n| n.id == node_id) {
                     set_drag_offset_x.set(canvas_x - node.x);
                     set_drag_offset_y.set(canvas_y - node.y);
@@ -517,6 +512,7 @@ pub fn Canvas(
                         let has_connection = connections_snapshot.iter().any(|c| c.target_node_id == node.id);
                         let is_selected = selected == Some(node.id);
                         let is_deleting = deleting == Some(node.id);
+                        let is_trigger = node.node_type == "trigger";
                         view! {
                             <GraphNode
                                 x={node.x}
@@ -526,11 +522,17 @@ pub fn Canvas(
                                 node_id={node.id}
                                 has_input_connection={has_connection}
                                 is_deleting={is_deleting}
+                                is_trigger={is_trigger}
                                 on_output_drag_start={Some(Callback::from(handle_output_drag_start))}
                                 on_input_drag_end={Some(Callback::from(handle_input_drag_end))}
                                 on_input_click={Some(handle_input_click)}
                                 on_input_reroute_start={Some(Callback::from(handle_input_reroute_start))}
                                 cancel_connection_drag={Some(cancel_connection_drag)}
+                                on_trigger={if is_trigger { Some(Callback::new(move |id| {
+                                    if let Some(cb) = &on_trigger {
+                                        cb.run(id);
+                                    }
+                                }))} else { None }}
                             />
                         }
                     }).collect::<Vec<_>>()

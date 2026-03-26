@@ -260,6 +260,30 @@ html, body, #app {
   padding: 12px;
   font-size: 13px;
   color: var(--text-secondary);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.trigger-btn {
+  padding: 6px 16px;
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.trigger-btn:hover {
+  background: var(--accent-hover);
+  transform: scale(1.02);
+}
+
+.trigger-btn:active {
+  transform: scale(0.98);
 }
 
 .node-port {
