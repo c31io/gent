@@ -1,3 +1,13 @@
+/// Execution status of a node
+#[derive(Clone, Debug, PartialEq)]
+pub enum NodeStatus {
+    Pending,
+    Running,
+    Waiting,
+    Complete,
+    Error,
+}
+
 /// Minimal node state for rendering
 #[derive(Clone, Debug)]
 pub struct NodeState {
@@ -7,6 +17,7 @@ pub struct NodeState {
     pub node_type: String,
     pub label: String,
     pub selected: bool,
+    pub status: NodeStatus,
 }
 
 /// Represents a persistent wire connection between two nodes

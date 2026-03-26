@@ -23,6 +23,12 @@ pub const NODE_TYPES: &[NodeType] = &[
         category: "Input",
         description: "Load file contents",
     },
+    NodeType {
+        id: "trigger",
+        name: "Trigger",
+        category: "Input",
+        description: "Click to start execution",
+    },
     // Context
     NodeType {
         id: "template",
