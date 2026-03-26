@@ -174,28 +174,6 @@ pub fn AppLayout() -> impl IntoView {
         set_selected_node_id.set(Some(node_id));
     };
 
-    // Delete node handler - animates shrink then removes node
-    let _delete_node = move |node_id: u32| {
-        // First unselect to prevent flash to next node
-        set_selected_node_id.set(None);
-
-        // Then set deleting node to trigger shrink animation
-        set_deleting_node_id.set(Some(node_id));
-
-        // After animation completes, remove the node
-        let nodes_to_delete = node_id;
-        let connections_to_delete = node_id;
-
-        spawn_local(async move {
-            TimeoutFuture::new(300).await;
-            set_nodes.update(|n: &mut Vec<NodeState>| n.retain(|node| node.id != nodes_to_delete));
-            set_connections.update(|c: &mut Vec<ConnectionState>| c.retain(|conn| {
-                conn.source_node_id != connections_to_delete && conn.target_node_id != connections_to_delete
-            }));
-            set_deleting_node_id.set(None);
-        });
-    };
-
     let handle_left_divider_mouse_down = move |ev: web_sys::MouseEvent| {
         ev.prevent_default();
         set_dragging_left.set(true);
