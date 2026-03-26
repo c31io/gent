@@ -643,3 +643,82 @@ html, body, #app {
 .node-port.file { border-color: var(--port-file); }
 .node-port.embeddings { border-color: var(--port-embeddings); }
 .node-port.trigger { border-color: var(--port-trigger); }
+
+/* Node variant body elements */
+.node-variant-input {
+    width: 100%;
+    padding: 6px 8px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--text-primary);
+    outline: none;
+}
+
+.node-variant-input:focus {
+    border-color: var(--accent-color);
+}
+
+.node-variant-textarea {
+    width: 100%;
+    padding: 6px 8px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--text-primary);
+    outline: none;
+    resize: vertical;
+    font-family: inherit;
+}
+
+.node-variant-textarea:focus {
+    border-color: var(--accent-color);
+}
+
+.node-variant-textarea.code {
+    font-family: monospace;
+}
+
+.node-variant-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.node-variant-field label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+}
+
+.node-variant-input.small {
+    width: 80px;
+}
+
+.node-variant-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.port-label {
+    position: absolute;
+    font-size: 10px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.node-port.input .port-label {
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.node-port.output .port-label {
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+}
