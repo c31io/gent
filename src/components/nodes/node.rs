@@ -157,7 +157,7 @@ pub fn GraphNode(
     on_input_reroute_start: Option<Callback<(u32,)>>,
     cancel_connection_drag: Option<Callback<(), ()>>,
     on_trigger: Option<Callback<u32>>,
-    _on_variant_change: Option<Callback<NodeVariant>>,
+    #[prop(default = None)] on_variant_change: Option<Callback<NodeVariant>>,
 ) -> impl IntoView {
     let class = if selected { "node selected" } else { "node" };
     let class = if is_deleting {
