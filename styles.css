@@ -215,8 +215,7 @@ html, body, #app {
 /* Node (DOM-based) */
 .node {
   position: absolute;
-  min-width: 160px;
-  max-width: 280px;
+  width: 160px;
   background: var(--node-bg);
   border: 2px solid var(--node-border);
   border-radius: 8px;
