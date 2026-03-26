@@ -26,6 +26,8 @@ pub fn Canvas(
     #[prop(default = None)] on_node_drop: Option<Callback<(String, f64, f64)>>,
     /// Left panel width signal (for calculating canvas offset)
     #[prop(default = None)] left_width: Option<Signal<i32>>,
+    /// Callback when trigger node is clicked
+    #[prop(default = None)] on_trigger: Option<Callback<u32>>,
 ) -> impl IntoView {
     // Canvas transform state (local to canvas)
     let (zoom, set_zoom) = signal(1.0f64);
@@ -172,7 +174,17 @@ pub fn Canvas(
                     callback.run(Some(node_id));
                 }
 
+                // Check if this is a trigger node - fire and don't drag
                 let nodes_snapshot = nodes.get();
+                if let Some(node) = nodes_snapshot.iter().find(|n| n.id == node_id) {
+                    if node.node_type == "trigger" {
+                        if let Some(callback) = &on_trigger {
+                            callback.run(node_id);
+                        }
+                        return;  // Don't start dragging for trigger nodes
+                    }
+                }
+
                 if let Some(node) = nodes_snapshot.iter().find(|n| n.id == node_id) {
                     set_drag_offset_x.set(canvas_x - node.x);
                     set_drag_offset_y.set(canvas_y - node.y);
