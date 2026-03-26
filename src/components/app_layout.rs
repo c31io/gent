@@ -2,7 +2,7 @@ use leptos::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use gloo_timers::future::TimeoutFuture;
 
-use crate::components::canvas::state::{ConnectionState, NodeState, NodeStatus};
+use crate::components::canvas::state::{ConnectionState, NodeState, NodeStatus, default_ports_for_type, default_variant_for_type};
 use crate::components::canvas::Canvas;
 use crate::components::execution_engine::{ExecutionState, get_downstream_nodes};
 use crate::components::execution_trace::ExecutionTrace;
@@ -30,6 +30,8 @@ pub fn AppLayout() -> impl IntoView {
             label: "Trigger".to_string(),
             selected: false,
             status: NodeStatus::Pending,
+            variant: default_variant_for_type("trigger"),
+            ports: default_ports_for_type("trigger"),
         },
         NodeState {
             id: 2,
@@ -39,6 +41,8 @@ pub fn AppLayout() -> impl IntoView {
             label: "Planner Agent".to_string(),
             selected: false,
             status: NodeStatus::Pending,
+            variant: default_variant_for_type("planner_agent"),
+            ports: default_ports_for_type("planner_agent"),
         },
         NodeState {
             id: 3,
@@ -48,6 +52,8 @@ pub fn AppLayout() -> impl IntoView {
             label: "Web Search".to_string(),
             selected: false,
             status: NodeStatus::Pending,
+            variant: default_variant_for_type("web_search"),
+            ports: default_ports_for_type("web_search"),
         },
     ]);
 
@@ -68,6 +74,9 @@ pub fn AppLayout() -> impl IntoView {
     let (selected_node_id, set_selected_node_id) = signal(Option::<u32>::None);
     let (deleting_node_id, set_deleting_node_id) = signal(Option::<u32>::None);
     let (next_node_id, set_next_node_id) = signal(4u32);
+
+    // Inspector state for selected node
+    let (inspector_node, set_inspector_node) = signal(Option::<NodeState>::None);
 
     // Drag preview state
     let (dragging_node_type, set_dragging_node_type) = signal(Option::<String>::None);
@@ -156,6 +165,8 @@ pub fn AppLayout() -> impl IntoView {
             label,
             selected: false,
             status: NodeStatus::Pending,
+            variant: default_variant_for_type(&node_type),
+            ports: default_ports_for_type(&node_type),
         };
 
         set_nodes.update(|nodes: &mut Vec<NodeState>| nodes.push(new_node));
@@ -164,7 +175,7 @@ pub fn AppLayout() -> impl IntoView {
     };
 
     // Delete node handler - animates shrink then removes node
-    let delete_node = move |node_id: u32| {
+    let _delete_node = move |node_id: u32| {
         // First unselect to prevent flash to next node
         set_selected_node_id.set(None);
 
@@ -262,6 +273,16 @@ pub fn AppLayout() -> impl IntoView {
                     on_node_drop={Some(Callback::from(handle_node_drop))}
                     left_width={Some(left_width.into())}
                     on_trigger={Some(Callback::new(handle_trigger))}
+                    on_selection_change={Some(Callback::new(move |node_id| {
+                        if let Some(id) = node_id {
+                            let nodes_snapshot = nodes.get();
+                            if let Some(node) = nodes_snapshot.iter().find(|n| n.id == id) {
+                                set_inspector_node.set(Some(node.clone()));
+                            }
+                        } else {
+                            set_inspector_node.set(None);
+                        }
+                    }))}
                 />
 
                 {/* Right Divider */}
@@ -281,9 +302,19 @@ pub fn AppLayout() -> impl IntoView {
 
             {/* Node Inspector Drawer */}
             <NodeInspector
-                nodes={nodes.into()}
-                selected_node_id={selected_node_id.into()}
-                on_delete={Callback::from(delete_node)}
+                selected_node={inspector_node.into()}
+                on_node_delete={Some(Callback::new(move |node_id| {
+                    set_nodes.update(|nodes| {
+                        nodes.retain(|n| n.id != node_id);
+                    });
+                    set_connections.update(|conns| {
+                        conns.retain(|c| c.source_node_id != node_id && c.target_node_id != node_id);
+                    });
+                    set_inspector_node.set(None);
+                }))}
+                on_close={Some(Callback::new(move |_| {
+                    set_inspector_node.set(None);
+                }))}
             />
 
             {/* Drag Preview */}

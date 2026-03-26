@@ -4,19 +4,14 @@ use crate::components::canvas::state::NodeState;
 /// Node inspector drawer - displays details of selected node
 #[component]
 pub fn NodeInspector(
-    selected_node_id: Signal<Option<u32>>,
-    nodes: Signal<Vec<NodeState>>,
-    #[prop(default = "".to_string())] config: String,
-    on_delete: Callback<(u32,), ()>,
+    /// The selected node signal
+    selected_node: Signal<Option<NodeState>>,
+    /// Callback when node delete is requested
+    #[prop(default = None)] on_node_delete: Option<Callback<u32>>,
+    /// Callback when inspector is closed
+    #[prop(default = None)] on_close: Option<Callback<()>>,
 ) -> impl IntoView {
-    // Derive the selected node from signals
-    let selected_node = move || {
-        let id = selected_node_id.get()?;
-        let nodes_snapshot = nodes.get();
-        nodes_snapshot.into_iter().find(|n| n.id == id)
-    };
-
-    let is_visible = move || selected_node_id.get().is_some();
+    let is_visible = move || selected_node.get().is_some();
 
     view! {
         <div
@@ -24,7 +19,7 @@ pub fn NodeInspector(
             class:visible={is_visible}
         >
             {move || {
-                if let Some(node) = selected_node() {
+                if let Some(node) = selected_node.get() {
                     view! {
                         <div class="inspector-content">
                             <div class="inspector-header">
@@ -32,17 +27,34 @@ pub fn NodeInspector(
                                     <span class="node-type-badge">{node.node_type.clone()}</span>
                                     <span class="node-label">{node.label.clone()}</span>
                                 </div>
-                                <button
-                                    class="delete-btn"
-                                    title="Delete node"
-                                    on:click={move |_| {
-                                        on_delete.run((node.id,));
-                                    }}
-                                >
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                                    </svg>
-                                </button>
+                                <div class="inspector-actions">
+                                    <button
+                                        class="close-btn"
+                                        title="Close inspector"
+                                        on:click={move |_| {
+                                            if let Some(callback) = on_close {
+                                                callback.run(());
+                                            }
+                                        }}
+                                    >
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M18 6L6 18M6 6l12 12"/>
+                                        </svg>
+                                    </button>
+                                    <button
+                                        class="delete-btn"
+                                        title="Delete node"
+                                        on:click={move |_| {
+                                            if let Some(callback) = on_node_delete {
+                                                callback.run(node.id);
+                                            }
+                                        }}
+                                    >
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
                             <div class="inspector-body">
                                 <label class="config-label">Configuration</label>
@@ -50,7 +62,6 @@ pub fn NodeInspector(
                                     type="text"
                                     class="config-input"
                                     placeholder="No configuration yet"
-                                    value={config.clone()}
                                 />
                             </div>
                         </div>
