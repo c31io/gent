@@ -6,6 +6,16 @@ use crate::components::canvas::state::{ConnectionState, DraggingConnection, Node
 use crate::components::canvas::wires::draw_connections;
 use crate::components::nodes::node::GraphNode;
 
+/// Check if two ports are compatible for connection
+fn ports_compatible(source: &Port, target: &Port) -> bool {
+    // Trigger ports only connect to other trigger ports
+    if source.port_type == PortType::Trigger || target.port_type == PortType::Trigger {
+        return source.port_type == target.port_type;
+    }
+    // All other port types can connect to each other
+    true
+}
+
 /// Canvas for rendering nodes with pan/zoom
 #[component]
 pub fn Canvas(
@@ -104,6 +114,34 @@ pub fn Canvas(
     let handle_input_drag_end = move |node_id: u32, _x: f64, _y: f64| {
         if let Some(dc) = dragging_connection.get() {
             if dc.source_node_id != node_id {
+                // Get source and target nodes
+                let all_nodes = nodes.get();
+                let source_node = all_nodes
+                    .iter()
+                    .find(|n| n.id == dc.source_node_id);
+
+                let target_node = all_nodes
+                    .iter()
+                    .find(|n| n.id == node_id);
+
+                // Validate port compatibility - at least one output must be compatible with one input
+                let is_compatible = source_node.and_then(|s| {
+                    target_node.map(|t| {
+                        s.ports.iter().filter(|p| p.direction == PortDirection::Out)
+                            .any(|src_port| {
+                                t.ports.iter().filter(|p| p.direction == PortDirection::In)
+                                    .any(|tgt_port| ports_compatible(src_port, tgt_port))
+                            })
+                    })
+                }).unwrap_or(false);
+
+                if !is_compatible {
+                    // Invalid connection - cancel the drag
+                    set_dragging_connection.set(None);
+                    set_rerouting_from.set(None);
+                    return;
+                }
+
                 if let Some(src_input) = dc.source_input_node_id {
                     set_connections.update(|c: &mut Vec<ConnectionState>| c.retain(|conn|
                         !(conn.source_node_id == dc.source_node_id && conn.target_node_id == src_input)
