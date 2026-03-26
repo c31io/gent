@@ -266,11 +266,12 @@ html, body, #app {
 
 .node-body {
   padding: 12px;
+  padding-top: 150px;
   font-size: 13px;
   color: var(--text-secondary);
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .trigger-btn {
@@ -303,8 +304,7 @@ html, body, #app {
   border-radius: 50%;
   cursor: crosshair;
   transition: border-color 0.15s, transform 0.15s;
-  top: 50%;
-  transform: translateY(-50%);
+  /* top and transform removed - using explicit pixel positioning from node.rs inline style */
   z-index: 1;
 }
 
@@ -318,7 +318,7 @@ html, body, #app {
 
 .node-port:hover {
   border-color: var(--accent-color);
-  transform: translateY(-50%) scale(1.2);
+  transform: scale(1.2);
 }
 
 /* Execution Trace */

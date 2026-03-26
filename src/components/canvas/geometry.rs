@@ -1,7 +1,5 @@
 use wasm_bindgen::JsCast;
 
-use crate::components::canvas::state::NodeState;
-
 /// Find input port element at given viewport coordinates
 pub fn find_input_port_at(x: f64, y: f64) -> Option<u32> {
     let doc = web_sys::window()?.document()?;
@@ -72,17 +70,4 @@ pub fn get_node_id_from_event(ev: &web_sys::MouseEvent) -> Option<u32> {
         }
     }
     None
-}
-
-/// Get port center position from a nodes slice (pure version for wire drawing)
-pub fn get_port_center_static(node_id: u32, port_type: &str, nodes: &[NodeState]) -> (f64, f64) {
-    if let Some(node) = nodes.iter().find(|n| n.id == node_id) {
-        let port_offset_x = if port_type == "output" { 150.0 } else { 0.0 };
-        let port_offset_y = 35.0;
-        let x = node.x + port_offset_x;
-        let y = node.y + port_offset_y;
-        (x, y)
-    } else {
-        (0.0, 0.0)
-    }
 }
