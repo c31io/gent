@@ -123,6 +123,10 @@ pub fn AppLayout() -> impl IntoView {
         set_dragging_right.set(false);
         // Clear drag preview state
         set_dragging_node_type.set(None);
+        // Clear window draggedNodeType to prevent stale state on subsequent clicks
+        if let Some(window) = web_sys::window() {
+            let _ = js_sys::Reflect::delete_property(&window, &"draggedNodeType".into());
+        }
     };
 
     // Global mouse move for drag preview
