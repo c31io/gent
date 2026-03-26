@@ -1,5 +1,5 @@
 use leptos::prelude::*;
-use crate::components::execution_engine::{ExecutionState, TraceLevel};
+use crate::components::execution_engine::{ExecutionState, TraceEntry, TraceLevel};
 
 /// Format duration in milliseconds
 fn format_duration(ms: u128) -> String {
@@ -30,37 +30,14 @@ fn level_emoji(level: &TraceLevel) -> &'static str {
     }
 }
 
-/// Render a single trace message
-fn render_message(msg: &crate::components::execution_engine::TraceEntry) -> impl IntoView {
-    let emoji = level_emoji(&msg.level);
-    let ts = format_timestamp(msg.timestamp);
-    view! {
-        <div class="trace-message">
-            <span class="trace-ts">{ts}</span>
-            <span class="trace-emoji">{emoji}</span>
-            <span class="trace-msg-text">{msg.message.clone()}</span>
-        </div>
-    }
-}
-
-/// Render a single trace task
-fn render_task(task: &crate::components::execution_engine::Task) -> impl IntoView {
-    let duration = task.started_at.map(|started| {
-        let end = task.finished_at.unwrap_or_else(std::time::Instant::now);
-        format_duration(end.duration_since(started).as_millis())
-    }).unwrap_or_default();
-
-    view! {
-        <div class="trace-thread">
-            <div class="trace-task-header">
-                <span class="trace-status-dot"></span>
-                <span class="trace-node-type">{task.node_type.clone()}</span>
-                <span class="trace-duration">{duration}</span>
-            </div>
-            <div class="trace-messages">
-                {task.messages.iter().map(render_message).collect::<Vec<_>>()}
-            </div>
-        </div>
+/// Get status display class
+fn status_class(status: &crate::components::execution_engine::TaskStatus) -> &'static str {
+    match status {
+        crate::components::execution_engine::TaskStatus::Pending => "status-pending",
+        crate::components::execution_engine::TaskStatus::Running => "status-running",
+        crate::components::execution_engine::TaskStatus::Waiting => "status-waiting",
+        crate::components::execution_engine::TaskStatus::Complete => "status-complete",
+        crate::components::execution_engine::TaskStatus::Error => "status-error",
     }
 }
 
@@ -68,6 +45,8 @@ fn render_task(task: &crate::components::execution_engine::Task) -> impl IntoVie
 pub fn ExecutionTrace(
     execution: Signal<ExecutionState>,
 ) -> impl IntoView {
+    let exec = execution.get();
+
     view! {
         <div class="execution-trace">
             <div class="panel-header">"Execution Trace"</div>
