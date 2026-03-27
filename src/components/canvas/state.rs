@@ -104,6 +104,8 @@ pub fn default_ports_for_type(node_type: &str) -> Vec<Port> {
             Port { name: "output".into(), port_type: PortType::Text, direction: PortDirection::Out },
         ],
         "file_input" => vec![Port { name: "output".into(), port_type: PortType::File, direction: PortDirection::Out }],
+        "image_input" => vec![Port { name: "output".into(), port_type: PortType::Image, direction: PortDirection::Out }],
+        "audio_input" => vec![Port { name: "output".into(), port_type: PortType::Audio, direction: PortDirection::Out }],
         "trigger" => vec![Port { name: "output".into(), port_type: PortType::Trigger, direction: PortDirection::Out }],
         "template" => vec![
             Port { name: "input".into(), port_type: PortType::Text, direction: PortDirection::In },
@@ -173,7 +175,11 @@ pub fn get_output_ports(node_type: &str, variant: &NodeVariant) -> Vec<Port> {
 
     // TODO: Add dynamic output ports for Loop based on iterations if needed
 
-    ports
+    match node_type {
+        "image_input" => ports,
+        "audio_input" => ports,
+        _ => ports,
+    }
 }
 
 /// Fixed port spacing in pixels (distance between consecutive ports)
@@ -238,6 +244,8 @@ pub fn default_variant_for_type(node_type: &str) -> NodeVariant {
     match node_type {
         "user_input" => NodeVariant::UserInput { text: String::new() },
         "file_input" => NodeVariant::FileInput { path: String::new() },
+        "image_input" => NodeVariant::FileInput { path: String::new() },
+        "audio_input" => NodeVariant::FileInput { path: String::new() },
         "trigger" => NodeVariant::Trigger,
         "template" => NodeVariant::Template { template: String::new() },
         "retrieval" => NodeVariant::Retrieval { query: String::new() },

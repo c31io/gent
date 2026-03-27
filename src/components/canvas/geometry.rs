@@ -12,18 +12,6 @@ pub fn find_input_port_at(x: f64, y: f64) -> Option<u32> {
     Some(node_id)
 }
 
-/// Check if the mouse event target is an input port
-pub fn is_input_port(ev: &web_sys::MouseEvent) -> bool {
-    if let Some(target) = ev.target() {
-        if let Ok(element) = target.dyn_into::<web_sys::Element>() {
-            if let Some(port_type) = element.get_attribute("data-port") {
-                return port_type == "input";
-            }
-        }
-    }
-    false
-}
-
 /// Check if the mouse event target is any port (input or output)
 pub fn is_port(ev: &web_sys::MouseEvent) -> bool {
     if let Some(target) = ev.target() {

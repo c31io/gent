@@ -167,7 +167,7 @@ pub fn GraphNode(
     on_input_reroute_start: Option<Callback<(u32,)>>,
     cancel_connection_drag: Option<Callback<(), ()>>,
     on_trigger: Option<Callback<u32>>,
-    #[prop(default = None)] on_variant_change: Option<Callback<NodeVariant>>,
+    #[prop(default = None)] _on_variant_change: Option<Callback<NodeVariant>>,
     #[prop(default = None)] on_text_change: Option<Callback<(u32, String)>>,
 ) -> impl IntoView {
     let class = if selected { "node selected" } else { "node" };
