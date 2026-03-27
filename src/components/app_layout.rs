@@ -226,6 +226,24 @@ pub fn AppLayout() -> impl IntoView {
                             task.add_message("Code Execute → (TBD)", crate::components::execution_engine::TraceLevel::Info);
                             "code executed".to_string()
                         }
+                        "image_input" => {
+                            if let crate::components::canvas::state::NodeVariant::FileInput { path } = &node.variant {
+                                task.add_message(&format!("Image: {}", path), crate::components::execution_engine::TraceLevel::Info);
+                                path.clone()
+                            } else {
+                                task.add_message("Image Input (no path)", crate::components::execution_engine::TraceLevel::Warn);
+                                String::new()
+                            }
+                        }
+                        "audio_input" => {
+                            if let crate::components::canvas::state::NodeVariant::FileInput { path } = &node.variant {
+                                task.add_message(&format!("Audio: {}", path), crate::components::execution_engine::TraceLevel::Info);
+                                path.clone()
+                            } else {
+                                task.add_message("Audio Input (no path)", crate::components::execution_engine::TraceLevel::Warn);
+                                String::new()
+                            }
+                        }
                         _ => {
                             task.add_message(&format!("{} executed", node.label), crate::components::execution_engine::TraceLevel::Info);
                             upstream.values().next().cloned().unwrap_or_default()
