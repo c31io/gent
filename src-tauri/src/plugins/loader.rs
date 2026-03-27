@@ -4,7 +4,7 @@ use crate::plugins::plugin::Plugin;
 use crate::plugins::{RuneLoader, RustWasmLoader, WasmLoader};
 use std::sync::Arc;
 
-/// Registry of WASM loaders that tries each in sequence
+/// Registry of WASM loaders for general plugin loading (Rust WASM only)
 pub struct PluginLoader {
     loaders: Vec<Arc<dyn WasmLoader>>,
 }
@@ -13,7 +13,6 @@ impl PluginLoader {
     pub fn new() -> Self {
         let loaders = vec![
             Arc::new(RustWasmLoader::new().unwrap()) as Arc<dyn WasmLoader>,
-            Arc::new(RuneLoader::new().unwrap()) as Arc<dyn WasmLoader>,
         ];
         Self { loaders }
     }
@@ -44,4 +43,13 @@ impl Default for PluginLoader {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Load the one and only Rune script engine
+pub fn load_rune_engine(
+    wasm: &[u8],
+    capabilities: &[Capability],
+) -> Result<Box<dyn Plugin>, PluginError> {
+    RuneLoader::new()
+        .and_then(|loader| loader.load(wasm, capabilities))
 }

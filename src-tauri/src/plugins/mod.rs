@@ -17,7 +17,7 @@ pub use host::PluginHost;
 pub use registry::PluginRegistry;
 pub use rust_loader::RustWasmLoader;
 pub use rune_loader::RuneLoader;
-pub use loader::PluginLoader;
+pub use loader::{load_rune_engine, PluginLoader};
 
 /// WASM loader trait - implemented by RuneLoader and RustWasmLoader
 pub trait WasmLoader: Send + Sync {
