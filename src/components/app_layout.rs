@@ -130,7 +130,7 @@ pub fn AppLayout() -> impl IntoView {
         queue.push_back(trigger_id);
 
         let mut execution_order: Vec<(u32, HashMap<u32, String>)> = vec![];
-        let mut upstream_results: HashMap<u32, String> = HashMap::new();
+        let upstream_results: HashMap<u32, String> = HashMap::new();
 
         while let Some(node_id) = queue.pop_front() {
             execution_order.push((node_id, upstream_results.clone()));
