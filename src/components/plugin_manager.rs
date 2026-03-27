@@ -1,5 +1,40 @@
 use leptos::prelude::*;
+use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
+use wasm_bindgen_futures::JsFuture;
+
+/// Call Tauri backend to list loaded plugins
+async fn list_plugins() -> Result<Vec<PluginInfo>, String> {
+    // Access window.__TAURI__.core.invoke
+    let window = js_sys::global();
+    let tauri = js_sys::Reflect::get(&window, &"__TAURI__".into())
+        .map_err(|e| format!("failed to get __TAURI__: {:?}", e))?;
+    let core = js_sys::Reflect::get(&tauri, &"core".into())
+        .map_err(|e| format!("failed to get core: {:?}", e))?;
+    let invoke = js_sys::Reflect::get(&core, &"invoke".into())
+        .map_err(|e| format!("failed to get invoke: {:?}", e))?;
+
+    // Create invoke("list_plugins", {}) call
+    let args = js_sys::Array::new();
+    args.push(&"list_plugins".into());
+    args.push(&js_sys::Object::new());
+
+    let promise: js_sys::Promise = js_sys::Reflect::apply(&invoke.into(), &wasm_bindgen::JsValue::UNDEFINED, &args)
+        .map_err(|e| format!("invoke failed: {:?}", e))?
+        .dyn_into()
+        .map_err(|e| format!("not a promise: {:?}", e))?;
+
+    // Await the promise
+    let js_value = JsFuture::from(promise)
+        .await
+        .map_err(|e| format!("promise failed: {:?}", e))?;
+
+    // Deserialize JSON to PluginInfo
+    let plugins: Vec<PluginInfo> = serde_wasm_bindgen::from_value(js_value)
+        .map_err(|e| format!("deserialization failed: {:?}", e))?;
+
+    Ok(plugins)
+}
 
 #[component]
 pub fn PluginManager() -> impl IntoView {
@@ -56,9 +91,4 @@ pub struct Manifest {
     pub name: String,
     pub version: String,
     pub description: String,
-}
-
-async fn list_plugins() -> Result<Vec<PluginInfo>, String> {
-    // For now, return empty list until Tauri invoke is properly configured
-    Ok(Vec::new())
 }

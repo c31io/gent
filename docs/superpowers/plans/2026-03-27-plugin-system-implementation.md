@@ -873,7 +873,7 @@ git commit -m "feat(plugin): add RuneLoader skeleton"
 
 ---
 
-## Task 8: PluginLoader Registry (loader selection)
+## Task 8: PluginLoader Registry (Rust WASM only)
 
 **Files:**
 - Create: `src-tauri/src/plugins/loader.rs`
@@ -885,9 +885,9 @@ git commit -m "feat(plugin): add RuneLoader skeleton"
 // src-tauri/src/plugins/tests.rs (add to existing)
 
 #[test]
-fn test_plugin_loader_selects_correct_backend() {
+fn test_plugin_loader_only_loads_rust_wasm() {
     let loader = PluginLoader::new();
-    // RuneLoader should not load empty bytes
+    // Should not load empty bytes
     assert!(!loader.can_load(b""));
 }
 ```
@@ -903,7 +903,7 @@ use crate::plugins::plugin::Plugin;
 use crate::plugins::{RuneLoader, RustWasmLoader, WasmLoader};
 use std::sync::Arc;
 
-/// Registry of WASM loaders that tries each in sequence
+/// Registry of WASM loaders for general plugin loading (Rust WASM only)
 pub struct PluginLoader {
     loaders: Vec<Arc<dyn WasmLoader>>,
 }
@@ -912,7 +912,6 @@ impl PluginLoader {
     pub fn new() -> Self {
         let loaders = vec![
             Arc::new(RustWasmLoader::new().unwrap()) as Arc<dyn WasmLoader>,
-            Arc::new(RuneLoader::new().unwrap()) as Arc<dyn WasmLoader>,
         ];
         Self { loaders }
     }
@@ -944,6 +943,15 @@ impl Default for PluginLoader {
         Self::new()
     }
 }
+
+/// Load the one and only Rune script engine
+pub fn load_rune_engine(
+    wasm: &[u8],
+    capabilities: &[Capability],
+) -> Result<Box<dyn Plugin>, PluginError> {
+    RuneLoader::new()
+        .and_then(|loader| loader.load(wasm, capabilities))
+}
 ```
 
 - [ ] **Step 3: Update mod.rs**
@@ -965,7 +973,7 @@ pub use host::PluginHost;
 pub use registry::PluginRegistry;
 pub use rust_loader::RustWasmLoader;
 pub use rune_loader::RuneLoader;
-pub use loader::{PluginLoader, WasmLoader};
+pub use loader::{load_rune_engine, PluginLoader, WasmLoader};
 ```
 
 - [ ] **Step 4: Run tests**
@@ -977,7 +985,7 @@ Expected: PASS
 
 ```bash
 git add src-tauri/src/plugins/
-git commit -m "feat(plugin): add PluginLoader registry with backend selection"
+git commit -m "feat(plugin): add PluginLoader registry (Rust WASM only) and load_rune_engine function"
 ```
 
 ---
