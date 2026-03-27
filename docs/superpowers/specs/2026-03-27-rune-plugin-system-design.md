@@ -1,4 +1,4 @@
-# Gent Rune Plugin System Design
+# Gent Plugin System Design
 
 **Date:** 2026-03-27
 **Status:** Approved
@@ -8,32 +8,51 @@
 
 ## Overview
 
-Gent's key differentiator is a first-class plugin system powered by Rune (a WASM-native Rust companion language) running inside a Tauri desktop application. Plugins are compiled to `.wasm` modules and loaded at runtime with capability-based security.
+Gent's key differentiator is a first-class plugin system powered by WASM running inside a Tauri desktop application. Plugins are compiled to `.wasm` modules and loaded at runtime with capability-based security.
+
+Gent supports **two plugin backends** via a unified interface:
+- **Rune** — scripting for rapid iteration, no Rust toolchain needed
+- **Rust** — full WASM compilation for power users who need the Rust ecosystem
 
 This document describes the plugin architecture, capability model, lifecycle, host API, and security model.
 
 ---
 
-## Why Rune
+## Why WASM + Two Backends
 
-| Aspect | Lua | Rune |
-|--------|-----|------|
-| Rust integration | via mlua/rlua | Native |
-| WASM support | Limited | First-class |
-| Ecosystem maturity | Battle-tested | Early-stage |
-| Learning curve | Low | Moderate |
+| Aspect | Lua | Rune scripting | Rust WASM |
+|--------|-----|----------------|-----------|
+| Rust integration | via mlua/rlua | Native | Native |
+| WASM support | Limited | First-class | First-class |
+| Ecosystem maturity | Battle-tested | Early-stage | Battle-tested |
+| Learning curve | Low | Moderate | High |
+| Access to crates.io | No | Limited | Full |
+| Iteration speed | Fast | Fast | Slow (compile) |
 
-Rune was chosen because:
-- It aligns with Gent's Rust/Tauri/WASM stack philosophy
-- WASM-native design enables true sandboxing
-- Type-safe FFI with Rust reduces runtime errors
-- Early adopter positioning in a nascent ecosystem
+**Design decision:** Rune for scripting (fast iteration, low barrier), Rust WASM for power (full ecosystem access). Both share the same `Plugin` interface and `PluginHost` API.
+
+**Key insight:** Rune and Rust WASM both compile to `.wasm` — Gent's loader can treat them identically at the interface level, with different compilation/packaging flows.
 
 ---
 
 ## Plugin Structure
 
-Each plugin is a Rune module compiled to WASM with two required exports:
+All plugins expose the same required exports, regardless of backend:
+
+### Required Exports
+
+| Export | Type | Description |
+|--------|------|-------------|
+| `manifest()` | `fn() -> Manifest` | Plugin metadata and capability requirements |
+| `process(input)` | `fn(Input) -> Output` | Main entry point for plugin execution |
+
+### Optional Exports
+
+| Export | Type | Description |
+|--------|------|-------------|
+| `init(ctx)` | `fn(Context) -> ()` | One-time initialization with capability-gated handle |
+
+### Rune Plugin Example
 
 ```rune
 // manifest.rn
@@ -48,22 +67,110 @@ pub fn manifest() -> Manifest {
 }
 
 pub fn process(input: Input) -> Output {
-    // plugin logic
+    // plugin logic in Rune
 }
 ```
 
-### Required Exports
+### Rust Plugin Example
 
-| Export | Type | Description |
-|--------|------|-------------|
-| `manifest()` | `fn() -> Manifest` | Plugin metadata and capability requirements |
-| `process(input)` | `fn(Input) -> Output` | Main entry point for plugin execution |
+```rust
+// lib.rs
+use gent_plugin::prelude::*;
 
-### Optional Exports
+pub fn manifest() -> Manifest {
+    Manifest {
+        name: "My Plugin",
+        version: "1.0.0",
+        description: "What it does",
+        capabilities: vec!["context".into(), "tools".into()],
+    }
+}
 
-| Export | Type | Description |
-|--------|------|-------------|
-| `init(ctx)` | `fn(Context) -> ()` | One-time initialization with capability-gated handle |
+pub fn process(input: Input) -> Output {
+    // plugin logic in Rust, compiled to wasm32-wasip2
+}
+
+#[gent_plugin::gent_main]
+fn main() {}
+```
+
+### gent-plugin SDK
+
+Rust plugin authors use the `gent-plugin` crate for type-safe bindings:
+
+```toml
+# Cargo.toml (plugin project)
+[dependencies]
+gent-plugin = { path = "path/to/gent/src/gent-plugin" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+```
+
+The SDK provides:
+
+- `#[gent_plugin::gent_main]` — marks the WASM entry point
+- `manifest!()` macro — builds `Manifest` with compile-time validation
+- `Input` / `Output` types — JSON-serializable plugin I/O
+- `Context` — capability-gated host access
+- `Capability` enum — typed capability declarations
+
+---
+
+## Loader Architecture
+
+```
+┌─────────────────────────────────────────────┐
+│              PluginRegistry                  │
+│  (tracks all loaded plugins, their state)   │
+└─────────────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────┐
+│            dyn Plugin trait                  │
+│   fn manifest() -> Manifest                  │
+│   fn process(input) -> Result<Output, Err>   │
+│   fn init(ctx: Context) -> Result<(), Err>  │
+└─────────────────────────────────────────────┘
+                      │
+         ┌────────────┴────────────┐
+         ▼                         ▼
+┌─────────────────┐      ┌─────────────────────┐
+│   RuneLoader    │      │    RustWasmLoader    │
+│                 │      │                     │
+│ - Loads .wasm   │      │ - Loads .wasm       │
+│   compiled from │      │   compiled from      │
+│   Rune source  │      │   Rust/wasm-bindgen  │
+│                │      │                     │
+│ - Uses rune    │      │ - Uses wasmtime      │
+│   runtime     │      │   or similar         │
+└─────────────────┘      └─────────────────────┘
+```
+
+### Loader Trait
+
+```rust
+trait WasmLoader: Send + Sync {
+    /// Probe wasm bytes to check if this loader can handle it
+    fn can_load(&self, wasm: &[u8]) -> bool;
+
+    /// Load and instantiate the plugin
+    fn load(
+        &self,
+        wasm: &[u8],
+        capabilities: &[Capability],
+    ) -> Result<Box<dyn Plugin>, PluginError>;
+}
+
+struct RuneLoader { /* rune runtime instance */ }
+struct RustWasmLoader { /* wasmtime instance */ }
+```
+
+### Loader Selection
+
+- Gent probes the `.wasm` binary to determine which loader to use
+- Rune-compiled WASM includes a known module name prefix or custom section
+- Rust-compiled WASM uses standard `wasm32-wasip2` target
+- A `PluginLoader` registry tries loaders in sequence until one succeeds
 
 ---
 
@@ -199,14 +306,20 @@ gent/
 │   ├── components/
 │   │   ├── plugins/
 │   │   │   ├── mod.rs
-│   │   │   ├── host.rs        # PluginHost trait
-│   │   │   ├── loader.rs      # WASM loading and validation
+│   │   │   ├── host.rs           # PluginHost trait
+│   │   │   ├── loader.rs         # PluginLoader registry + selection
+│   │   │   ├── rune_loader.rs    # Rune WASM backend
+│   │   │   ├── rust_loader.rs    # Rust WASM backend (wasmtime)
 │   │   │   ├── capabilities.rs
 │   │   │   ├── errors.rs
-│   │   │   └── registry.rs    # Loaded plugin registry
-│   │   └── plugin_manager.rs  # UI for managing plugins
-│   └── ...
-├── plugins/                   # User-installed plugins
+│   │   │   ├── registry.rs       # Loaded plugin registry
+│   │   │   └── plugin_manager.rs # UI for managing plugins
+│   │   └── ...
+│   └── gent-plugin/              # Plugin SDK (for Rust plugin authors)
+│       ├── Cargo.toml
+│       └── src/
+│           └── lib.rs            # manifest!, gent_main! macros
+├── plugins/                      # User-installed plugins
 │   └── .gitkeep
 └── Cargo.toml
 ```
@@ -215,10 +328,11 @@ gent/
 
 ## Future Considerations
 
-- **Plugin marketplace**: Signed plugins with verified capabilities
-- **Plugin dependencies**: Allow plugins to depend on other plugins
+- **Plugin marketplace**: Not planned — manual loading only
+- **Plugin dependencies**: Plugins can call other plugins via namespacing
 - **Hot reload**: Update plugins without restarting Gent
 - **Debugging tools**: Step-through plugin execution in the trace panel
+- **WASM component model**: Align with emerging WASM component model standard
 
 ---
 
@@ -227,3 +341,4 @@ gent/
 - How should plugins be versioned and updated?
 - Should plugins be allowed to spawn child plugins (agent-like behavior)?
 - What is the migration path if Rune's ecosystem stalls?
+- How to detect Rune vs Rust WASM at load time (module name prefix, custom section)?
