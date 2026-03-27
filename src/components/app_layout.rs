@@ -182,16 +182,23 @@ pub fn AppLayout() -> impl IntoView {
                 let mut task = crate::components::execution_engine::Task::new(exec_node_id, "trigger", None);
                 task.status = crate::components::execution_engine::TaskStatus::Running;
                 task.started_at = Some(crate::components::execution_engine::Timestamp::now());
-                task.add_message("Trigger fired", crate::components::execution_engine::TraceLevel::Info);
+                task.add_message(&format!("Trigger fired [task_id={}]", task.id), crate::components::execution_engine::TraceLevel::Info);
                 task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
                 task.status = crate::components::execution_engine::TaskStatus::Complete;
                 exec.tasks.push(task);
             } else {
                 // Find the node state
                 if let Some(node) = nodes_snapshot.iter().find(|n| n.id == exec_node_id) {
-                    let mut task = crate::components::execution_engine::Task::new(exec_node_id, &node.node_type, None);
+                    // Determine parent_id from the previous task in execution order
+                    let parent_id = exec.tasks.last().map(|t| t.id.clone());
+                    // Set waiting_on if we have upstream dependencies
+                    let waiting_on = upstream.keys().next().copied();
+
+                    let mut task = crate::components::execution_engine::Task::new(exec_node_id, &node.node_type, parent_id);
+                    task.waiting_on = waiting_on;
                     task.status = crate::components::execution_engine::TaskStatus::Running;
                     task.started_at = Some(crate::components::execution_engine::Timestamp::now());
+                    task.add_message(&format!("{} [node_id={}, parent_id={:?}]", node.label, task.node_id, task.parent_id), crate::components::execution_engine::TraceLevel::Info);
 
                     // Execute node with upstream results
                     let result = match node.node_type.as_str() {
