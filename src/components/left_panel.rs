@@ -13,7 +13,7 @@ pub const NODE_TYPES: &[NodeType] = &[
     // Input
     NodeType {
         id: "user_input",
-        name: "User Input",
+        name: "Text Input",
         category: "Input",
         description: "Text input from user",
     },
@@ -90,7 +90,7 @@ pub const NODE_TYPES: &[NodeType] = &[
     // Output
     NodeType {
         id: "chat_output",
-        name: "Chat Response",
+        name: "Text Output",
         category: "Output",
         description: "Display chat response",
     },

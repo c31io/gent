@@ -41,6 +41,8 @@ pub fn Canvas(
     #[prop(default = None)] right_width: Option<Signal<i32>>,
     /// Callback when trigger node is clicked
     #[prop(default = None)] on_trigger: Option<Callback<u32>>,
+    /// Callback when text input changes in a node
+    #[prop(default = None)] on_text_change: Option<Callback<(u32, String)>>,
 ) -> impl IntoView {
     // Canvas transform state (local to canvas)
     let (zoom, set_zoom) = signal(1.0f64);
@@ -641,6 +643,7 @@ pub fn Canvas(
                                 on_input_reroute_start={Some(Callback::from(handle_input_reroute_start))}
                                 cancel_connection_drag={Some(cancel_connection_drag)}
                                 on_trigger={on_trigger}
+                                on_text_change={on_text_change}
                             />
                         }
                     }).collect::<Vec<_>>()

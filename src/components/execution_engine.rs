@@ -158,7 +158,7 @@ pub fn execute_node_sync(
             Some("code stubbed".to_string())
         }
         "user_input" => {
-            task.add_message("User Input node", TraceLevel::Info);
+            task.add_message("Text Input node", TraceLevel::Info);
             Some("user input value".to_string())
         }
         "template" => {
