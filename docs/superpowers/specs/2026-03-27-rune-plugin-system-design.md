@@ -132,45 +132,57 @@ The SDK provides:
 │   fn init(ctx: Context) -> Result<(), Err>  │
 └─────────────────────────────────────────────┘
                       │
-         ┌────────────┴────────────┐
-         ▼                         ▼
-┌─────────────────┐      ┌─────────────────────┐
-│   RuneLoader    │      │    RustWasmLoader    │
-│                 │      │                     │
-│ - Loads .wasm   │      │ - Loads .wasm       │
-│   compiled from │      │   compiled from      │
-│   Rune source  │      │   Rust/wasm-bindgen  │
-│                │      │                     │
-│ - Uses rune    │      │ - Uses wasmtime      │
-│   runtime     │      │   or similar         │
-└─────────────────┘      └─────────────────────┘
+                      ▼
+         ┌───────────────────────────┐
+         │    PluginLoader (Rust)    │
+         │                           │
+         │ - Registry of Rust WASM   │
+         │   loaders (wasmtime)      │
+         │                           │
+         │ - Loads .wasm files via   │
+         │   file picker UI          │
+         └───────────────────────────┘
+
+┌─────────────────────────────────────────────┐
+│       load_rune_engine() (Rune)             │
+│                                               │
+│ - One and only Rune script engine            │
+│ - Dedicated entry point for scripting        │
+│ - Not part of general plugin registry        │
+└─────────────────────────────────────────────┘
 ```
 
-### Loader Trait
+### PluginLoader (Rust WASM)
 
 ```rust
-trait WasmLoader: Send + Sync {
-    /// Probe wasm bytes to check if this loader can handle it
-    fn can_load(&self, wasm: &[u8]) -> bool;
+pub struct PluginLoader {
+    loaders: Vec<Arc<dyn WasmLoader>>,
+}
 
-    /// Load and instantiate the plugin
-    fn load(
+impl PluginLoader {
+    /// Load a Rust WASM plugin
+    pub fn load_plugin(
         &self,
         wasm: &[u8],
         capabilities: &[Capability],
     ) -> Result<Box<dyn Plugin>, PluginError>;
-}
 
-struct RuneLoader { /* rune runtime instance */ }
-struct RustWasmLoader { /* wasmtime instance */ }
+    /// Check if any loader can handle this WASM binary
+    pub fn can_load(&self, wasm: &[u8]) -> bool;
+}
 ```
 
-### Loader Selection
+### Rune Engine Loader
 
-- Gent probes the `.wasm` binary to determine which loader to use
-- Rune-compiled WASM includes a known module name prefix or custom section
-- Rust-compiled WASM uses standard `wasm32-wasip2` target
-- A `PluginLoader` registry tries loaders in sequence until one succeeds
+```rust
+/// Load the one and only Rune script engine
+pub fn load_rune_engine(
+    wasm: &[u8],
+    capabilities: &[Capability],
+) -> Result<Box<dyn Plugin>, PluginError>;
+```
+
+**Design note:** The Rune engine is a single, singleton runtime embedded in Gent. It is loaded via a dedicated function, not through the general `PluginLoader` registry. This avoids the need for loader detection and ensures the script engine is always available.
 
 ---
 
@@ -341,4 +353,3 @@ gent/
 - How should plugins be versioned and updated?
 - Should plugins be allowed to spawn child plugins (agent-like behavior)?
 - What is the migration path if Rune's ecosystem stalls?
-- How to detect Rune vs Rust WASM at load time (module name prefix, custom section)?
