@@ -45,7 +45,10 @@ impl Default for PluginLoader {
     }
 }
 
-/// Load the one and only Rune script engine
+/// Load the one and only Rune script engine.
+///
+/// The Rune engine is a singleton embedded in Gent, not a general plugin.
+/// Separate from PluginLoader to avoid loader detection ambiguity.
 pub fn load_rune_engine(
     wasm: &[u8],
     capabilities: &[Capability],
