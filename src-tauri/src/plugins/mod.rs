@@ -8,6 +8,8 @@ pub mod rune_loader;
 pub mod loader;
 pub mod commands;
 
+#[cfg(test)] mod integration_test;
+
 pub use errors::PluginError;
 pub use capabilities::Capability;
 pub use plugin::{Manifest, Input, Output, Plugin, Context};
