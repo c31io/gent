@@ -5,14 +5,14 @@ use crate::plugins::plugin::{Input, Manifest, Output, Plugin};
 /// Loader for Rune-compiled WASM plugins
 pub struct RuneLoader {
     // Rune runtime context - will be initialized per-plugin
-    runtime: rune::Runtime,
+    // Note: rune 0.13 API differs - using placeholder
+    _placeholder: (),
 }
 
 impl RuneLoader {
     pub fn new() -> Result<Self, PluginError> {
-        let runtime = rune::Runtime::new()
-            .map_err(|e| PluginError::Loader(format!("rune runtime error: {}", e)))?;
-        Ok(Self { runtime })
+        // TODO: Initialize Rune runtime when actual API is known
+        Ok(Self { _placeholder: () })
     }
 
     /// Check if bytes appear to be a Rune-compiled WASM module

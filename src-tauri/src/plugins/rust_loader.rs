@@ -12,8 +12,7 @@ pub struct RustWasmLoader {
 
 impl RustWasmLoader {
     pub fn new() -> Result<Self, PluginError> {
-        let engine = Engine::new_default()
-            .map_err(|e| PluginError::Loader(e.to_string()))?;
+        let engine = Engine::default();
         Ok(Self { engine })
     }
 

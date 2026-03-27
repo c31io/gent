@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use uuid::Uuid;
 
-#[derive(Debug)]
+// #[derive(Debug)]  // Removed - dyn Plugin doesn't implement Debug
 pub struct PluginRegistry {
     plugins: RwLock<HashMap<String, Arc<dyn Plugin>>>,
 }
