@@ -2,3 +2,4 @@
 /target/
 /Cargo.lock
 /.worktrees/
+/src/gent-plugin/target/
