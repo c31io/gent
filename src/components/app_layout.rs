@@ -1,10 +1,11 @@
 use leptos::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use gloo_timers::future::TimeoutFuture;
+use std::collections::HashMap;
 
 use crate::components::canvas::state::{ConnectionState, NodeState, NodeStatus, default_ports_for_type, default_variant_for_type};
 use crate::components::canvas::Canvas;
-use crate::components::execution_engine::{ExecutionState, get_downstream_nodes};
+use crate::components::execution_engine::ExecutionState;
 use crate::components::execution_trace::ExecutionTrace;
 use crate::components::left_panel::{LeftPanel, NODE_TYPES};
 use crate::components::node_inspector::NodeInspector;
@@ -38,7 +39,7 @@ pub fn AppLayout() -> impl IntoView {
             x: 300.0,
             y: 150.0,
             node_type: "user_input".to_string(),
-            label: "User Input".to_string(),
+            label: "Text Input".to_string(),
             selected: false,
             status: NodeStatus::Pending,
             variant: default_variant_for_type("user_input"),
@@ -49,7 +50,7 @@ pub fn AppLayout() -> impl IntoView {
             x: 520.0,
             y: 150.0,
             node_type: "chat_output".to_string(),
-            label: "Chat Response".to_string(),
+            label: "Text Output".to_string(),
             selected: false,
             status: NodeStatus::Pending,
             variant: default_variant_for_type("chat_output"),
@@ -90,60 +91,159 @@ pub fn AppLayout() -> impl IntoView {
     // Execution state for the execution engine
     let (execution_state, set_execution_state) = signal(ExecutionState::new());
 
+    // Handler for text input changes
+    let handle_text_change = move |node_id: u32, new_text: String| {
+        set_nodes.update(|nodes: &mut Vec<NodeState>| {
+            if let Some(node) = nodes.iter_mut().find(|n| n.id == node_id) {
+                if let crate::components::canvas::state::NodeVariant::UserInput { text } = &mut node.variant {
+                    *text = new_text;
+                }
+            }
+        });
+    };
+
+    /// Execute nodes in topological order (BFS from trigger), collecting upstream results
+    fn execute_downstream_order(
+        nodes: &[NodeState],
+        connections: &[ConnectionState],
+        trigger_id: u32,
+    ) -> Vec<(u32, HashMap<u32, String>)> {
+        use std::collections::{HashMap, VecDeque};
+
+        let mut in_degree: HashMap<u32, usize> = HashMap::new();
+        let mut adj: HashMap<u32, Vec<u32>> = HashMap::new();
+
+        for node in nodes {
+            in_degree.insert(node.id, 0);
+            adj.insert(node.id, vec![]);
+        }
+
+        for conn in connections {
+            if let Some(list) = adj.get_mut(&conn.source_node_id) {
+                list.push(conn.target_node_id);
+            }
+            *in_degree.entry(conn.target_node_id).or_insert(0) += 1;
+        }
+
+        // BFS from trigger
+        let mut queue: VecDeque<u32> = VecDeque::new();
+        queue.push_back(trigger_id);
+
+        let mut execution_order: Vec<(u32, HashMap<u32, String>)> = vec![];
+        let mut upstream_results: HashMap<u32, String> = HashMap::new();
+
+        while let Some(node_id) = queue.pop_front() {
+            execution_order.push((node_id, upstream_results.clone()));
+
+            if let Some(downstream_ids) = adj.get(&node_id) {
+                for &downstream_id in downstream_ids {
+                    *in_degree.entry(downstream_id).or_insert(0) -= 1;
+                    if in_degree[&downstream_id] == 0 {
+                        queue.push_back(downstream_id);
+                    }
+                }
+            }
+        }
+
+        execution_order
+    }
+
     // Handle trigger node execution
     let handle_trigger = move |node_id: u32| {
         let nodes_snapshot = nodes.get();
         let connections_snapshot = connections.get();
 
-        // Find the trigger node
-        if let Some(_trigger_node) = nodes_snapshot.iter().find(|n| n.id == node_id && n.node_type == "trigger") {
-            // Get downstream nodes
-            let downstream = get_downstream_nodes(&connections_snapshot, node_id);
+        if nodes_snapshot.iter().find(|n| n.id == node_id && n.node_type == "trigger").is_none() {
+            return;
+        }
 
-            // Create execution state
-            let mut exec = ExecutionState::new();
-            exec.running = true;
+        // Get execution order with upstream results
+        let execution_plan = execute_downstream_order(&nodes_snapshot, &connections_snapshot, node_id);
 
-            // Add trigger task
-            let mut trigger_task = crate::components::execution_engine::Task::new(node_id, "trigger", None);
-            trigger_task.status = crate::components::execution_engine::TaskStatus::Running;
-            trigger_task.started_at = Some(crate::components::execution_engine::Timestamp::now());
-            trigger_task.add_message("Trigger fired", crate::components::execution_engine::TraceLevel::Info);
-            trigger_task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
-            trigger_task.status = crate::components::execution_engine::TaskStatus::Complete;
-            exec.tasks.push(trigger_task);
+        let mut exec = ExecutionState::new();
+        exec.running = true;
 
-            // Queue downstream tasks
-            for downstream_id in downstream {
-                if let Some(node) = nodes_snapshot.iter().find(|n| n.id == downstream_id) {
-                    let mut task = crate::components::execution_engine::Task::new(downstream_id, &node.node_type, None);
-                    task.status = crate::components::execution_engine::TaskStatus::Running;
-                    task.started_at = Some(crate::components::execution_engine::Timestamp::now());
-                    task.add_message(&format!("Executing {}...", node.label), crate::components::execution_engine::TraceLevel::Info);
+        let mut node_results: HashMap<u32, String> = HashMap::new();
 
-                    // Simple synchronous execution for MVP (no actual async)
-                    // Web search stub
-                    let result = if node.node_type == "web_search" {
-                        task.add_message("Web Search → { mock results }", crate::components::execution_engine::TraceLevel::Info);
-                        Some(r#"{"query":"mock","results":[]}"#.to_string())
-                    } else if node.node_type == "code_execute" {
-                        task.add_message("Code Execute → (TBD)", crate::components::execution_engine::TraceLevel::Info);
-                        Some("code executed".to_string())
-                    } else {
-                        task.add_message(&format!("{} complete", node.label), crate::components::execution_engine::TraceLevel::Info);
-                        Some("ok".to_string())
-                    };
+        // Extract just the node IDs in order for upstream computation
+        let exec_order_ids: Vec<u32> = execution_plan.iter().map(|(id, _)| *id).collect();
 
-                    task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
-                    task.status = crate::components::execution_engine::TaskStatus::Complete;
-                    task.result = result;
-                    exec.tasks.push(task);
+        for (exec_idx, (exec_node_id, _upstream)) in execution_plan.into_iter().enumerate() {
+            // Compute actual upstream results from previously executed nodes
+            let mut upstream: HashMap<u32, String> = HashMap::new();
+            for prev_exec_node_id in exec_order_ids.iter().take(exec_idx) {
+                if let Some(result) = node_results.get(prev_exec_node_id) {
+                    upstream.insert(*prev_exec_node_id, result.clone());
                 }
             }
 
-            exec.running = false;
-            set_execution_state.set(exec);
+            if exec_node_id == node_id {
+                // Trigger node itself
+                let mut task = crate::components::execution_engine::Task::new(exec_node_id, "trigger", None);
+                task.status = crate::components::execution_engine::TaskStatus::Running;
+                task.started_at = Some(crate::components::execution_engine::Timestamp::now());
+                task.add_message("Trigger fired", crate::components::execution_engine::TraceLevel::Info);
+                task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
+                task.status = crate::components::execution_engine::TaskStatus::Complete;
+                exec.tasks.push(task);
+            } else {
+                // Find the node state
+                if let Some(node) = nodes_snapshot.iter().find(|n| n.id == exec_node_id) {
+                    let mut task = crate::components::execution_engine::Task::new(exec_node_id, &node.node_type, None);
+                    task.status = crate::components::execution_engine::TaskStatus::Running;
+                    task.started_at = Some(crate::components::execution_engine::Timestamp::now());
+
+                    // Execute node with upstream results
+                    let result = match node.node_type.as_str() {
+                        "user_input" => {
+                            if let crate::components::canvas::state::NodeVariant::UserInput { text } = &node.variant {
+                                task.add_message(&format!("Text Input: {}", text), crate::components::execution_engine::TraceLevel::Info);
+                                text.clone()
+                            } else {
+                                task.add_message("Text Input (no text)", crate::components::execution_engine::TraceLevel::Warn);
+                                String::new()
+                            }
+                        }
+                        "chat_output" => {
+                            // Get input from upstream (user_input node)
+                            let input = upstream.values().next().cloned().unwrap_or_default();
+                            task.add_message(&format!("Text Output received: {}", input), crate::components::execution_engine::TraceLevel::Info);
+                            // Update the chat_output node's variant response
+                            set_nodes.update(|nodes: &mut Vec<NodeState>| {
+                                if let Some(n) = nodes.iter_mut().find(|n| n.id == exec_node_id) {
+                                    if let crate::components::canvas::state::NodeVariant::ChatOutput { response } = &mut n.variant {
+                                        *response = input.clone();
+                                    }
+                                }
+                            });
+                            input
+                        }
+                        "web_search" => {
+                            task.add_message("Web Search → { mock results }", crate::components::execution_engine::TraceLevel::Info);
+                            r#"{"query":"mock","results":[]}"#.to_string()
+                        }
+                        "code_execute" => {
+                            task.add_message("Code Execute → (TBD)", crate::components::execution_engine::TraceLevel::Info);
+                            "code executed".to_string()
+                        }
+                        _ => {
+                            task.add_message(&format!("{} executed", node.label), crate::components::execution_engine::TraceLevel::Info);
+                            upstream.values().next().cloned().unwrap_or_default()
+                        }
+                    };
+
+                    task.result = Some(result.clone());
+                    node_results.insert(exec_node_id, result.clone());
+
+                    task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
+                    task.status = crate::components::execution_engine::TaskStatus::Complete;
+                    exec.tasks.push(task);
+                }
+            }
         }
+
+        exec.running = false;
+        set_execution_state.set(exec);
     };
 
     // Callback to start palette drag
@@ -256,6 +356,7 @@ pub fn AppLayout() -> impl IntoView {
                     left_width={Some(left_width.into())}
                     right_width={Some(right_width.into())}
                     on_trigger={Some(Callback::new(handle_trigger))}
+                    on_text_change={Some(Callback::new(move |(node_id, new_text)| handle_text_change(node_id, new_text)))}
                     on_selection_change={Some(Callback::new(move |node_id| {
                         if let Some(id) = node_id {
                             let nodes_snapshot = nodes.get();
