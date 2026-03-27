@@ -37,7 +37,7 @@ pub fn draw_connections(
     connections: &[ConnectionState],
     dragging: &Option<DraggingConnection>,
     rerouting_from: Option<u32>,
-    nodes: &[NodeState],
+    _nodes: &[NodeState],
     port_positions: &HashMap<(u32, String), (f64, f64)>,
     pan_x: f64,
     pan_y: f64,
