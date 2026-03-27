@@ -3,16 +3,25 @@ use wasm_bindgen::JsCast;
 use crate::components::canvas::state::{PortWithOffset, PortDirection, PortType, NodeVariant};
 
 /// Renders variant-specific body content for a node
-fn render_variant_body(variant: &NodeVariant) -> impl IntoView {
+fn render_variant_body(variant: &NodeVariant, node_id: u32, on_text_change: &Option<Callback<(u32, String)>>) -> impl IntoView {
     match variant {
-        NodeVariant::UserInput { text } => view! {
-            <input
-                type="text"
-                class="node-variant-input"
-                value={text.clone()}
-                placeholder="Enter text..."
-            />
-        }.into_any(),
+        NodeVariant::UserInput { text } => {
+            let cb = on_text_change.clone();
+            view! {
+                <input
+                    type="text"
+                    class="node-variant-input"
+                    value={text.clone()}
+                    placeholder="Enter text..."
+                    on:input={move |ev| {
+                        let new_text = event_target_value(&ev);
+                        if let Some(callback) = cb {
+                            callback.run((node_id, new_text));
+                        }
+                    }}
+                />
+            }.into_any()
+        }
         NodeVariant::FileInput { path } => view! {
             <input
                 type="text"
@@ -159,6 +168,7 @@ pub fn GraphNode(
     cancel_connection_drag: Option<Callback<(), ()>>,
     on_trigger: Option<Callback<u32>>,
     #[prop(default = None)] on_variant_change: Option<Callback<NodeVariant>>,
+    #[prop(default = None)] on_text_change: Option<Callback<(u32, String)>>,
 ) -> impl IntoView {
     let class = if selected { "node selected" } else { "node" };
     let class = if is_deleting {
@@ -221,7 +231,7 @@ pub fn GraphNode(
                             "Run"
                         </button>
                     }.into_any(),
-                    _ => render_variant_body(&variant).into_any(),
+                    _ => render_variant_body(&variant, node_id, &on_text_change).into_any(),
                 }}
             </div>
             {/* Dynamic input ports */}
