@@ -24,6 +24,18 @@ pub const NODE_TYPES: &[NodeType] = &[
         description: "Load file contents",
     },
     NodeType {
+        id: "image_input",
+        name: "Image Input",
+        category: "Input",
+        description: "Provides an image file path as output",
+    },
+    NodeType {
+        id: "audio_input",
+        name: "Audio Input",
+        category: "Input",
+        description: "Provides an audio file path as output",
+    },
+    NodeType {
         id: "trigger",
         name: "Trigger",
         category: "Input",
