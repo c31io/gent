@@ -1,6 +1,6 @@
 use leptos::prelude::*;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Tab {
     Palette,
     Plugins,
@@ -156,23 +156,15 @@ pub fn LeftPanel(
     #[prop(default = None)] on_drag_start: Option<Callback<String>>,
 ) -> impl IntoView {
     let (active_tab, set_active_tab) = signal(Tab::default());
-    let categories = ["Input", "Context", "Agent", "Tool", "Control", "Output"];
 
     view! {
         <>
             <div class="panel-header">"Node Palette"</div>
-            <div class="panel-content">
-                {categories.iter().filter_map(|category| {
-                    let nodes = get_nodes_by_category(category);
-                    if nodes.is_empty() {
-                        None
-                    } else {
-                        Some(view! {
-                            <PaletteSection category={*category} nodes={nodes} on_drag_start={on_drag_start} />
-                        })
-                    }
-                }).collect::<Vec<_>>()}
-            </div>
+            <TabBar active_tab={active_tab.into()} set_active_tab={set_active_tab} />
+            {move || match active_tab.get() {
+                Tab::Palette => view! { <NodePalette on_drag_start={on_drag_start} /> }.into_any(),
+                Tab::Plugins => view! { <crate::components::plugin_manager::PluginManager /> }.into_any(),
+            }}
         </>
     }
 }
@@ -217,6 +209,28 @@ pub fn PaletteSection(
             <div class="palette-items">
                 {items}
             </div>
+        </div>
+    }
+}
+
+#[component]
+pub fn NodePalette(
+    #[prop(default = None)] on_drag_start: Option<Callback<String>>,
+) -> impl IntoView {
+    let categories = ["Input", "Context", "Agent", "Tool", "Control", "Output"];
+
+    view! {
+        <div class="panel-content">
+            {categories.iter().filter_map(|category| {
+                let nodes = get_nodes_by_category(category);
+                if nodes.is_empty() {
+                    None
+                } else {
+                    Some(view! {
+                        <PaletteSection category={*category} nodes={nodes} on_drag_start={on_drag_start} />
+                    })
+                }
+            }).collect::<Vec<_>>()}
         </div>
     }
 }
