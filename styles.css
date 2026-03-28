@@ -120,6 +120,29 @@ html, body, #app {
   padding: 8px;
 }
 
+/* Tab Bar */
+.tab-bar {
+    display: flex;
+    border-bottom: 1px solid var(--border-color, #333);
+    padding: 0 8px;
+}
+
+.tab-bar button {
+    background: none;
+    border: none;
+    padding: 8px 16px;
+    cursor: pointer;
+    color: var(--text-secondary, #888);
+    font-size: 13px;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+}
+
+.tab-bar button.tab-active {
+    color: var(--accent-color, #4a9eff);
+    border-bottom-color: var(--accent-color, #4a9eff);
+}
+
 /* Divider */
 .divider {
   width: var(--divider-width);
