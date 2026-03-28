@@ -131,6 +131,26 @@ fn get_nodes_by_category(category: &str) -> Vec<&'static NodeType> {
 }
 
 #[component]
+fn TabBar(active_tab: ReadSignal<Tab>, set_active_tab: WriteSignal<Tab>) -> impl IntoView {
+    view! {
+        <div class="tab-bar">
+            <button
+                class=move || format!("tab{}", if active_tab.get() == Tab::Palette { " tab-active" } else { "" })
+                on:click={move |_| set_active_tab.set(Tab::Palette)}
+            >
+                "Palette"
+            </button>
+            <button
+                class=move || format!("tab{}", if active_tab.get() == Tab::Plugins { " tab-active" } else { "" })
+                on:click={move |_| set_active_tab.set(Tab::Plugins)}
+            >
+                "Plugins"
+            </button>
+        </div>
+    }
+}
+
+#[component]
 pub fn LeftPanel(
     /// Callback when drag starts from palette
     #[prop(default = None)] on_drag_start: Option<Callback<String>>,
