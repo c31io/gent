@@ -1,5 +1,17 @@
 use leptos::prelude::*;
 
+#[derive(Clone, Copy, Debug)]
+enum Tab {
+    Palette,
+    Plugins,
+}
+
+impl Default for Tab {
+    fn default() -> Self {
+        Self::Palette
+    }
+}
+
 /// Node palette for the left panel
 #[derive(Clone, Debug)]
 pub struct NodeType {
@@ -123,6 +135,7 @@ pub fn LeftPanel(
     /// Callback when drag starts from palette
     #[prop(default = None)] on_drag_start: Option<Callback<String>>,
 ) -> impl IntoView {
+    let (active_tab, set_active_tab) = signal(Tab::default());
     let categories = ["Input", "Context", "Agent", "Tool", "Control", "Output"];
 
     view! {
