@@ -1,5 +1,17 @@
 use leptos::prelude::*;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Tab {
+    Palette,
+    Plugins,
+}
+
+impl Default for Tab {
+    fn default() -> Self {
+        Self::Palette
+    }
+}
+
 /// Node palette for the left panel
 #[derive(Clone, Debug)]
 pub struct NodeType {
@@ -119,27 +131,40 @@ fn get_nodes_by_category(category: &str) -> Vec<&'static NodeType> {
 }
 
 #[component]
+fn TabBar(active_tab: ReadSignal<Tab>, set_active_tab: WriteSignal<Tab>) -> impl IntoView {
+    view! {
+        <div class="tab-bar">
+            <button
+                class=move || format!("tab{}", if active_tab.get() == Tab::Palette { " tab-active" } else { "" })
+                on:click={move |_| set_active_tab.set(Tab::Palette)}
+            >
+                "Palette"
+            </button>
+            <button
+                class=move || format!("tab{}", if active_tab.get() == Tab::Plugins { " tab-active" } else { "" })
+                on:click={move |_| set_active_tab.set(Tab::Plugins)}
+            >
+                "Plugins"
+            </button>
+        </div>
+    }
+}
+
+#[component]
 pub fn LeftPanel(
     /// Callback when drag starts from palette
     #[prop(default = None)] on_drag_start: Option<Callback<String>>,
 ) -> impl IntoView {
-    let categories = ["Input", "Context", "Agent", "Tool", "Control", "Output"];
+    let (active_tab, set_active_tab) = signal(Tab::default());
 
     view! {
         <>
             <div class="panel-header">"Node Palette"</div>
-            <div class="panel-content">
-                {categories.iter().filter_map(|category| {
-                    let nodes = get_nodes_by_category(category);
-                    if nodes.is_empty() {
-                        None
-                    } else {
-                        Some(view! {
-                            <PaletteSection category={*category} nodes={nodes} on_drag_start={on_drag_start} />
-                        })
-                    }
-                }).collect::<Vec<_>>()}
-            </div>
+            <TabBar active_tab={active_tab.into()} set_active_tab={set_active_tab} />
+            {move || match active_tab.get() {
+                Tab::Palette => view! { <NodePalette on_drag_start={on_drag_start} /> }.into_any(),
+                Tab::Plugins => view! { <crate::components::plugin_manager::PluginManager /> }.into_any(),
+            }}
         </>
     }
 }
@@ -184,6 +209,28 @@ pub fn PaletteSection(
             <div class="palette-items">
                 {items}
             </div>
+        </div>
+    }
+}
+
+#[component]
+pub fn NodePalette(
+    #[prop(default = None)] on_drag_start: Option<Callback<String>>,
+) -> impl IntoView {
+    let categories = ["Input", "Context", "Agent", "Tool", "Control", "Output"];
+
+    view! {
+        <div class="panel-content">
+            {categories.iter().filter_map(|category| {
+                let nodes = get_nodes_by_category(category);
+                if nodes.is_empty() {
+                    None
+                } else {
+                    Some(view! {
+                        <PaletteSection category={*category} nodes={nodes} on_drag_start={on_drag_start} />
+                    })
+                }
+            }).collect::<Vec<_>>()}
         </div>
     }
 }

@@ -6,9 +6,23 @@ use wasm_bindgen_futures::JsFuture;
 /// Call Tauri backend to list loaded plugins
 async fn list_plugins() -> Result<Vec<PluginInfo>, String> {
     // Access window.__TAURI__.core.invoke
-    let window = js_sys::global();
-    let tauri = js_sys::Reflect::get(&window, &"__TAURI__".into())
-        .map_err(|e| format!("failed to get __TAURI__: {:?}", e))?;
+    let window = web_sys::window()
+        .ok_or_else(|| "failed to get window".to_string())?;
+
+    // Check if __TAURI__ exists
+    let tauri_val = js_sys::Reflect::get(&window, &"__TAURI__".into())
+        .map_err(|e| format!("failed to access __TAURI__: {:?}", e))?;
+
+    // __TAURI__ is undefined when running in browser (trunk serve) without Tauri
+    if tauri_val.is_undefined() {
+        return Err("Plugins are only available in the Tauri desktop app".to_string());
+    }
+
+    if !tauri_val.is_object() {
+        return Err(format!("__TAURI__ is not an object: {:?}", tauri_val));
+    }
+
+    let tauri = tauri_val;
     let core = js_sys::Reflect::get(&tauri, &"core".into())
         .map_err(|e| format!("failed to get core: {:?}", e))?;
     let invoke = js_sys::Reflect::get(&core, &"invoke".into())
