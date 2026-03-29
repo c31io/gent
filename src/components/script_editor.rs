@@ -274,9 +274,12 @@ pub fn ScriptEditor() -> impl IntoView {
             spawn_local({
                 let set_running = set_running.clone();
                 let set_error = set_error.clone();
+                let set_console_lines = set_console_lines.clone();
                 async move {
                     match run_script(script.id.clone()).await {
-                        Ok(_result) => {
+                        Ok(result) => {
+                            // Use console_lines from result (events not working in Tauri 2)
+                            set_console_lines.set(result.console_lines);
                             set_running.set(false);
                         }
                         Err(e) => {
