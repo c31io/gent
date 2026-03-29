@@ -232,6 +232,15 @@ pub fn ScriptEditor() -> impl IntoView {
 
             // Keep callback alive
             let _cb = cb;
+
+            // Test message to verify console is working
+            set_console_lines.update(|lines| {
+                lines.push(ConsoleLine {
+                    level: "info".into(),
+                    message: "Console ready".into(),
+                    run_id: "init".into(),
+                });
+            });
         }
     });
 
