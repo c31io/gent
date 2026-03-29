@@ -49,6 +49,10 @@ pub fn Canvas(
     let (pan_x, set_pan_x) = signal(0.0f64);
     let (pan_y, set_pan_y) = signal(0.0f64);
 
+    // Viewport dimensions
+    let (canvas_width, set_canvas_width) = signal(0u32);
+    let (canvas_height, set_canvas_height) = signal(0u32);
+
     // Track dragging state
     let (is_panning, set_is_panning) = signal(false);
     let (last_mouse_x, set_last_mouse_x) = signal(0.0f64);
@@ -578,7 +582,7 @@ pub fn Canvas(
             let pan_x_clone = pan_x.clone();
             let set_pan_x_clone = set_pan_x.clone();
             *resize_timeout.borrow_mut() = Some(Timeout::new(10, move || {
-                let current = pan_x_clone.get();
+                let current = pan_x_clone.get_untracked();
                 set_pan_x_clone.set(current);
             }));
         }) as Box<dyn Fn(_)>);
