@@ -219,20 +219,36 @@ pub fn ScriptEditor() -> impl IntoView {
 
             let args = js_sys::Array::new();
             args.push(&"script-console-line".into());
+
+            // listen() returns a Promise - must await it
+            let promise: js_sys::Promise = match js_sys::Reflect::apply(&listen_fn.into(), &event, &args) {
+                Ok(p) => match p.dyn_into::<js_sys::Promise>() {
+                    Ok(p) => p,
+                    Err(_) => return,
+                },
+                Err(_) => return,
+            };
+
+            // Await the promise to get the unlisten function
+            let unlisten: JsValue = match JsFuture::from(promise).await {
+                Ok(v) => v,
+                Err(_) => return,
+            };
+            web_sys::console::log_1(&format!("[JS] listener registered").into());
+
             let cb = wasm_bindgen::closure::Closure::wrap(Box::new(move |line: JsValue| {
-                eprintln!("[JS] event received: {:?}", line);
+                web_sys::console::log_1(&format!("[JS] event received").into());
                 if let Ok(cl) = serde_wasm_bindgen::from_value::<ConsoleLine>(line) {
-                    eprintln!("[JS] parsed: [{}] {}", cl.level, cl.message);
+                    web_sys::console::log_1(&format!("[JS] parsed: [{}] {}", cl.level, cl.message).into());
                     set_console_lines.update(|lines| {
                         lines.push(cl);
                     });
                 } else {
-                    eprintln!("[JS] failed to parse console line");
+                    web_sys::console::log_1(&"[JS] failed to parse".into());
                 }
             }) as Box<dyn FnMut(JsValue)>);
-            let _ = js_sys::Reflect::apply(&listen_fn.into(), &event, &args);
 
-            // Keep callback alive - MUST use forget(), not let _cb = cb
+            // Keep callback alive
             cb.forget();
 
             // Test message to verify console is working
