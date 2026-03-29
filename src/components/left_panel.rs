@@ -159,7 +159,6 @@ pub fn LeftPanel(
 
     view! {
         <>
-            <div class="panel-header">"Node Palette"</div>
             <TabBar active_tab={active_tab.into()} set_active_tab={set_active_tab} />
             {move || match active_tab.get() {
                 Tab::Palette => view! { <NodePalette on_drag_start={on_drag_start} /> }.into_any(),

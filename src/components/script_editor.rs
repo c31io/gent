@@ -369,8 +369,6 @@ pub fn ScriptEditor() -> impl IntoView {
             on:mouseup={handle_mouse_up}
             on:mouseleave={handle_editor_mouseleave}
         >
-            <div class="panel-header">"Scripts"</div>
-
             {move || {
                 if loading.get() {
                     view! { <p>"Loading scripts..."</p> }.into_any()

@@ -47,7 +47,6 @@ pub fn ExecutionTrace(
 ) -> impl IntoView {
     view! {
         <div class="execution-trace">
-            <div class="panel-header">"Execution Trace"</div>
             <div class="panel-content trace-content">
                 {move || {
                     let exec = execution.get();
