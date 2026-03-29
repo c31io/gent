@@ -38,21 +38,21 @@ impl RuneEngine {
         input: serde_json::Value,
         run_id: &str,
     ) -> Result<Vec<ConsoleLine>, PluginError> {
+        eprintln!("[DEBUG engine] run() called, run_id={}", run_id);
         let mut sources = Sources::new();
         let _ = sources.insert(Source::memory(source)
             .map_err(|e| PluginError::Runtime(format!("failed to create source: {}", e)))?);
 
         let mut diagnostics = Diagnostics::new();
 
-        // Build unit from sources (compiles the script)
-        let unit = rune::prepare(&mut sources)
-            .with_context(&self.context)
-            .with_diagnostics(&mut diagnostics)
-            .build()
-            .map_err(|e| PluginError::Runtime(format!("vm build error: {}", e)))?;
-
         // Collect console lines
         let mut lines = Vec::new();
+
+        // Build unit from sources (compiles the script)
+        let result: Result<_, _> = rune::prepare(&mut sources)
+            .with_context(&self.context)
+            .with_diagnostics(&mut diagnostics)
+            .build();
 
         // Emit compile errors to stderr (for logging) AND collect as ConsoleLine entries
         if !diagnostics.is_empty() {
@@ -88,6 +88,9 @@ impl RuneEngine {
             }
         }
 
+        // Return early if build failed, we already collected diagnostics
+        let unit = result.map_err(|e| PluginError::Runtime(format!("vm build error: {}", e)))?;
+
         // Create a new runtime from the cached context
         let runtime = self.context.runtime()
             .map_err(|e| PluginError::Runtime(format!("failed to create runtime: {}", e)))?;
@@ -103,11 +106,26 @@ impl RuneEngine {
         let input_value = serde_json::to_string(&input)
             .map_err(|e| PluginError::Runtime(format!("failed to serialize input: {}", e)))?;
 
-        match vm.call(["process"], (input_value,)) {
+        lines.push(ConsoleLine {
+            level: "info".into(),
+            message: "--- calling main ---".into(),
+            run_id: run_id.into(),
+        });
+
+        eprintln!("[DEBUG engine] vm.call starting, input={}", input_value);
+
+        match vm.call(["main"], (input_value,)) {
             Ok(_output) => {
+                eprintln!("[DEBUG engine] vm.call succeeded");
+                lines.push(ConsoleLine {
+                    level: "info".into(),
+                    message: "--- main returned ---".into(),
+                    run_id: run_id.into(),
+                });
                 // Phase 1: ignore output value, only console lines matter
             }
             Err(e) => {
+                eprintln!("[DEBUG engine] vm.call error: {}", e);
                 lines.push(ConsoleLine {
                     level: "error".into(),
                     message: format!("runtime error: {}", e),

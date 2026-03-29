@@ -35,12 +35,22 @@ fn user_scripts_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(scripts_dir)
 }
 
-/// Returns the bundled scripts directory from resources
-fn bundled_scripts_dir() -> Result<PathBuf, String> {
-    let resource_dir = std::env::var("RESOURCE_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("."));
-    Ok(resource_dir.join("scripts"))
+/// Returns the bundled scripts directory from resources.
+/// Falls back to `public/scripts` (Trunk dev server static files) during dev builds
+/// when the resource dir path doesn't contain scripts.
+fn bundled_scripts_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let resource_dir = app.path().resource_dir().map_err(|e| e.to_string())?;
+    let resource_scripts = resource_dir.join("scripts");
+    if resource_scripts.exists() {
+        return Ok(resource_scripts);
+    }
+    // Dev fallback: Trunk serves static files from `public/` at the project root
+    // (two dirs up from src-tauri/ where cargo runs)
+    let dev_path = PathBuf::from(".").join("..").join("public").join("scripts");
+    if dev_path.exists() {
+        return Ok(dev_path);
+    }
+    Ok(resource_scripts)
 }
 
 /// List all available scripts (bundled + user)
@@ -49,7 +59,7 @@ pub fn list_scripts(app: AppHandle) -> Result<Vec<ScriptInfo>, String> {
     let mut scripts = Vec::new();
 
     // Bundled scripts
-    let bundled = bundled_scripts_dir().unwrap_or_else(|_| PathBuf::new());
+    let bundled = bundled_scripts_dir(&app).unwrap_or_else(|_| PathBuf::new());
     if bundled.exists() {
         if let Ok(entries) = fs::read_dir(&bundled) {
             for entry in entries.filter_map(|e| e.ok()) {
@@ -117,7 +127,7 @@ pub fn read_script(app: AppHandle, id: String) -> Result<ScriptContent, String> 
     }
 
     // Check bundled scripts
-    let bundled_path = bundled_scripts_dir()?.join(format!("{}.rn", id));
+    let bundled_path = bundled_scripts_dir(&app)?.join(format!("{}.rn", id));
     if bundled_path.exists() {
         let source = fs::read_to_string(&bundled_path).map_err(|e| e.to_string())?;
         return Ok(ScriptContent { source });
@@ -135,7 +145,7 @@ pub fn save_script(app: AppHandle, id: String, content: String) -> Result<(), St
     }
 
     // Reject if matching bundled script
-    let bundled_path = bundled_scripts_dir()?.join(format!("{}.rn", id));
+    let bundled_path = bundled_scripts_dir(&app)?.join(format!("{}.rn", id));
     if bundled_path.exists() {
         return Err("cannot overwrite bundled script".into());
     }
@@ -171,11 +181,16 @@ pub async fn run_script(
     let run_id_clone = run_id.clone();
     let input_clone = input.clone();
     let lines: Vec<ConsoleLine> = tokio::task::spawn_blocking(move || {
-        engine.run(&source, input_clone, &run_id_clone)
+        eprintln!("[DEBUG] engine.run starting for run_id={}", run_id_clone);
+        let result = engine.run(&source, input_clone, &run_id_clone);
+        eprintln!("[DEBUG] engine.run result: {:?}", result.is_ok());
+        result
     })
     .await
     .map_err(|e| format!("task join error: {}", e))?
     .map_err(|e: PluginError| e.to_string())?;
+
+    eprintln!("[DEBUG] run_script returning {} lines", lines.len());
 
     // Emit each line as a Tauri event for real-time streaming
     for line in &lines {
