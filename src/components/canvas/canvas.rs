@@ -575,28 +575,37 @@ pub fn Canvas(
             pan_y.get(),
             zoom.get(),
         );
-
-        // Debounced resize handler to avoid excessive redraws
-        use gloo_timers::callback::Timeout;
-        use std::cell::RefCell;
-        static RESIZE_LISTENER_ADDED: std::sync::Once = std::sync::Once::new();
-        let resize_timeout: RefCell<Option<Timeout>> = RefCell::new(None);
-        let closure = wasm_bindgen::closure::Closure::wrap(Box::new(move |_ev: web_sys::Event| {
-            // Clear existing timeout
-            resize_timeout.borrow_mut().take();
-            // Set new timeout to debounce resize events
-            let pan_x_clone = pan_x.clone();
-            let set_pan_x_clone = set_pan_x.clone();
-            *resize_timeout.borrow_mut() = Some(Timeout::new(10, move || {
-                let current = pan_x_clone.get_untracked();
-                set_pan_x_clone.set(current);
-            }));
-        }) as Box<dyn Fn(_)>);
-        RESIZE_LISTENER_ADDED.call_once(|| {
-            window.add_event_listener_with_callback("resize", closure.as_ref().unchecked_ref()).ok();
-        });
-        closure.forget();
     });
+
+    // Window resize listener - runs once to attach, updates signals on resize
+    // These signal changes trigger the canvas Effect to redraw
+    static RESIZE_LISTENER_ADDED: std::sync::Once = std::sync::Once::new();
+    let set_canvas_width_clone = set_canvas_width.clone();
+    let set_canvas_height_clone = set_canvas_height.clone();
+
+    let closure = wasm_bindgen::closure::Closure::wrap(Box::new(move |_ev: web_sys::Event| {
+        if let Some(w) = web_sys::window() {
+            if let Some(d) = w.document() {
+                if let Some(canvas_elem) = d.get_element_by_id("wires-canvas") {
+                    if let Ok(canvas_ref) = canvas_elem.dyn_into::<web_sys::HtmlCanvasElement>() {
+                        if let Some(container) = canvas_ref.parent_element() {
+                            if let Ok(container) = container.dyn_into::<web_sys::HtmlElement>() {
+                                set_canvas_width_clone.set(container.client_width() as u32);
+                                set_canvas_height_clone.set(container.client_height() as u32);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }) as Box<dyn Fn(_)>);
+
+    RESIZE_LISTENER_ADDED.call_once(|| {
+        if let Some(w) = web_sys::window() {
+            w.add_event_listener_with_callback("resize", closure.as_ref().unchecked_ref()).ok();
+        }
+    });
+    closure.forget();
 
     view! {
         <div
