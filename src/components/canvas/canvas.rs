@@ -49,6 +49,10 @@ pub fn Canvas(
     let (pan_x, set_pan_x) = signal(0.0f64);
     let (pan_y, set_pan_y) = signal(0.0f64);
 
+    // Viewport dimensions
+    let (canvas_width, set_canvas_width) = signal(0u32);
+    let (canvas_height, set_canvas_height) = signal(0u32);
+
     // Track dragging state
     let (is_panning, set_is_panning) = signal(false);
     let (last_mouse_x, set_last_mouse_x) = signal(0.0f64);
@@ -516,6 +520,10 @@ pub fn Canvas(
         let _lw = left_w.get();
         let _rw = right_w.get();
 
+        // Track canvas dimensions so Effect re-runs after canvas resize
+        let _cw = canvas_width.get();
+        let _ch = canvas_height.get();
+
         let window = match web_sys::window() {
             Some(w) => w,
             None => return,
@@ -542,6 +550,7 @@ pub fn Canvas(
             let height = container.client_height() as u32;
             canvas_ref.set_width(width);
             canvas_ref.set_height(height);
+            // Note: canvas_width/canvas_height signals are set by the resize listener
         }
 
         let ctx: web_sys::CanvasRenderingContext2d = match canvas_ref.get_context("2d") {
@@ -565,28 +574,37 @@ pub fn Canvas(
             pan_y.get(),
             zoom.get(),
         );
-
-        // Debounced resize handler to avoid excessive redraws
-        use gloo_timers::callback::Timeout;
-        use std::cell::RefCell;
-        static RESIZE_LISTENER_ADDED: std::sync::Once = std::sync::Once::new();
-        let resize_timeout: RefCell<Option<Timeout>> = RefCell::new(None);
-        let closure = wasm_bindgen::closure::Closure::wrap(Box::new(move |_ev: web_sys::Event| {
-            // Clear existing timeout
-            resize_timeout.borrow_mut().take();
-            // Set new timeout to debounce resize events
-            let pan_x_clone = pan_x.clone();
-            let set_pan_x_clone = set_pan_x.clone();
-            *resize_timeout.borrow_mut() = Some(Timeout::new(10, move || {
-                let current = pan_x_clone.get();
-                set_pan_x_clone.set(current);
-            }));
-        }) as Box<dyn Fn(_)>);
-        RESIZE_LISTENER_ADDED.call_once(|| {
-            window.add_event_listener_with_callback("resize", closure.as_ref().unchecked_ref()).ok();
-        });
-        closure.forget();
     });
+
+    // Window resize listener - runs once to attach, updates signals on resize
+    // These signal changes trigger the canvas Effect to redraw
+    static RESIZE_LISTENER_ADDED: std::sync::Once = std::sync::Once::new();
+    let set_canvas_width_clone = set_canvas_width.clone();
+    let set_canvas_height_clone = set_canvas_height.clone();
+
+    let closure = wasm_bindgen::closure::Closure::wrap(Box::new(move |_ev: web_sys::Event| {
+        if let Some(w) = web_sys::window() {
+            if let Some(d) = w.document() {
+                if let Some(canvas_elem) = d.get_element_by_id("wires-canvas") {
+                    if let Ok(canvas_ref) = canvas_elem.dyn_into::<web_sys::HtmlCanvasElement>() {
+                        if let Some(container) = canvas_ref.parent_element() {
+                            if let Ok(container) = container.dyn_into::<web_sys::HtmlElement>() {
+                                set_canvas_width_clone.set(container.client_width() as u32);
+                                set_canvas_height_clone.set(container.client_height() as u32);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }) as Box<dyn Fn(_)>);
+
+    RESIZE_LISTENER_ADDED.call_once(|| {
+        if let Some(w) = web_sys::window() {
+            w.add_event_listener_with_callback("resize", closure.as_ref().unchecked_ref()).ok();
+        }
+    });
+    closure.forget();
 
     view! {
         <div
