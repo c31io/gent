@@ -220,16 +220,20 @@ pub fn ScriptEditor() -> impl IntoView {
             let args = js_sys::Array::new();
             args.push(&"script-console-line".into());
             let cb = wasm_bindgen::closure::Closure::wrap(Box::new(move |line: JsValue| {
+                eprintln!("[JS] event received: {:?}", line);
                 if let Ok(cl) = serde_wasm_bindgen::from_value::<ConsoleLine>(line) {
+                    eprintln!("[JS] parsed: [{}] {}", cl.level, cl.message);
                     set_console_lines.update(|lines| {
                         lines.push(cl);
                     });
+                } else {
+                    eprintln!("[JS] failed to parse console line");
                 }
             }) as Box<dyn FnMut(JsValue)>);
             let _ = js_sys::Reflect::apply(&listen_fn.into(), &event, &args);
 
-            // Keep callback alive
-            let _cb = cb;
+            // Keep callback alive - MUST use forget(), not let _cb = cb
+            cb.forget();
 
             // Test message to verify console is working
             set_console_lines.update(|lines| {
