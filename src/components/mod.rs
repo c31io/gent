@@ -6,3 +6,5 @@ pub mod node_inspector;
 pub mod execution_engine;
 pub mod execution_trace;
 pub mod plugin_manager;
+pub mod right_panel;
+pub mod script_editor;
