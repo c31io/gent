@@ -222,8 +222,7 @@ pub fn ScriptEditor() -> impl IntoView {
             let cb = wasm_bindgen::closure::Closure::wrap(Box::new(move |line: JsValue| {
                 if let Ok(cl) = serde_wasm_bindgen::from_value::<ConsoleLine>(line) {
                     set_console_lines.update(|lines| {
-                        let mut new_lines = lines.clone();
-                        new_lines.push(cl);
+                        lines.push(cl);
                     });
                 }
             }) as Box<dyn FnMut(JsValue)>);
