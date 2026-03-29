@@ -197,8 +197,13 @@ pub async fn run_script(
     eprintln!("[DEBUG] run_script emitting {} lines", lines.len());
 
     // Emit each line as a Tauri event for real-time streaming
-    for line in &lines {
-        let _ = app.emit("script-console-line", line.clone());
+    // Use window.emit() instead of app.emit() for window-scoped events
+    if let Some(window) = app.get_webview_window("main") {
+        for line in &lines {
+            let _ = window.emit("script-console-line", line.clone());
+        }
+    } else {
+        eprintln!("[DEBUG] could not get main window");
     }
 
     Ok(RunResult {
