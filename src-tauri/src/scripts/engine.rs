@@ -1,4 +1,5 @@
 use crate::plugins::errors::PluginError;
+use rune::diagnostics::Diagnostic;
 use rune::termcolor::{ColorChoice, StandardStream};
 use rune::{Context, Diagnostics, Source, Sources, Vm};
 use serde::Serialize;
@@ -53,7 +54,7 @@ impl RuneEngine {
         // Collect console lines
         let mut lines = Vec::new();
 
-        // Emit compile errors to stderr
+        // Emit compile errors to stderr (for logging) AND collect as ConsoleLine entries
         if !diagnostics.is_empty() {
             let mut writer = StandardStream::stderr(ColorChoice::Auto);
             if let Err(e) = diagnostics.emit(&mut writer, &sources) {
@@ -62,6 +63,28 @@ impl RuneEngine {
                     message: format!("diagnostic emit failed: {}", e),
                     run_id: run_id.into(),
                 });
+            }
+            // Also collect diagnostics as ConsoleLine entries so they appear in frontend
+            for diag in diagnostics.diagnostics() {
+                match diag {
+                    Diagnostic::Fatal(f) => {
+                        lines.push(ConsoleLine {
+                            level: "error".into(),
+                            message: f.to_string(),
+                            run_id: run_id.into(),
+                        });
+                    }
+                    Diagnostic::Warning(w) => {
+                        lines.push(ConsoleLine {
+                            level: "warning".into(),
+                            message: w.to_string(),
+                            run_id: run_id.into(),
+                        });
+                    }
+                    _ => {
+                        // Non-exhaustive enum, ignore unknown variants
+                    }
+                }
             }
         }
 
@@ -72,7 +95,11 @@ impl RuneEngine {
         let unit = Arc::new(unit);
         let mut vm = Vm::new(runtime, unit);
 
-        // Convert serde_json::Value to a String for rune
+        // Convert serde_json::Value to a String for rune.
+        // Note: rune 0.13's ToValue is not implemented for serde_json::Value,
+        // so we pass the input as a JSON string. Scripts receive input as a String
+        // and should call input.to_string() or parse with serde_json::from_str.
+        // This will be improved in a future phase.
         let input_value = serde_json::to_string(&input)
             .map_err(|e| PluginError::Runtime(format!("failed to serialize input: {}", e)))?;
 

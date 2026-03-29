@@ -154,8 +154,15 @@ pub async fn run_script(
 ) -> Result<RunResult, String> {
     let run_id = Uuid::new_v4().to_string();
 
-    // Read script source
-    let source = read_script(app.clone(), id.clone())?.source;
+    // Read script source in a blocking task to avoid blocking the async executor
+    let source = tokio::task::spawn_blocking({
+        let app = app.clone();
+        let id = id.clone();
+        move || read_script(app, id).map(|c| c.source)
+    })
+    .await
+    .map_err(|e| format!("task join error: {}", e))?
+    .map_err(|e| e.to_string())?;
 
     // Get RUNE_ENGINE
     let engine = RUNE_ENGINE.get().ok_or_else(|| String::from("Rune engine not initialized"))?;
