@@ -2,10 +2,12 @@ use std::process::Command;
 use std::sync::Arc;
 use crate::plugins::{PluginLoader, PluginRegistry};
 use crate::plugins::commands::{
-    self, call_plugin, list_plugins, load_plugin, unload_plugin, PluginState
+    call_plugin, list_plugins, load_plugin, unload_plugin, PluginState
 };
+use crate::scripts::commands::{list_scripts, read_script, save_script, run_script};
 
 mod plugins;
+pub mod scripts;
 
 #[tauri::command]
 fn execute_code(code: String) -> Result<String, String> {
@@ -34,6 +36,13 @@ fn execute_code(code: String) -> Result<String, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize Rune engine singleton
+    let rune_engine = crate::scripts::engine::RuneEngine::new()
+        .expect("failed to initialize Rune engine");
+    crate::scripts::engine::RUNE_ENGINE
+        .set(Arc::new(rune_engine))
+        .expect("Rune engine already initialized");
+
     let plugin_state = Arc::new(PluginState {
         registry: PluginRegistry::new(),
         loader: PluginLoader::new(),
@@ -48,6 +57,11 @@ pub fn run() {
             list_plugins,
             unload_plugin,
             call_plugin,
+            // Script commands
+            list_scripts,
+            read_script,
+            save_script,
+            run_script,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

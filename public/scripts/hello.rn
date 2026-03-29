@@ -1,0 +1,12 @@
+// hello.rn — basic hello world example
+// Run with: cargo tauri dev, select hello, click Run
+
+fn process(input) {
+    log::println("Hello from Rune script!");
+    log::println(input);
+    #{ result: "ok" }
+}
+
+pub fn main(input) {
+    process(input)
+}

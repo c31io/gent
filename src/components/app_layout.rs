@@ -6,8 +6,8 @@ use std::collections::HashMap;
 use crate::components::canvas::state::{ConnectionState, NodeState, NodeStatus, default_ports_for_type, default_variant_for_type};
 use crate::components::canvas::Canvas;
 use crate::components::execution_engine::ExecutionState;
-use crate::components::execution_trace::ExecutionTrace;
 use crate::components::left_panel::{LeftPanel, NODE_TYPES};
+use crate::components::right_panel::RightPanel;
 use crate::components::node_inspector::NodeInspector;
 
 /// Main application layout with left panel, canvas, and right panel
@@ -405,7 +405,7 @@ pub fn AppLayout() -> impl IntoView {
                     class="panel panel-right"
                     style:width=move || format!("{}px", right_width.get())
                 >
-                    <ExecutionTrace execution={execution_state.into()} />
+                    <RightPanel execution={execution_state.into()} />
                 </div>
             </div>
 
