@@ -147,7 +147,6 @@ html, body, #app {
 .divider {
   width: var(--divider-width);
   background: var(--border-color);
-  cursor: col-resize;
   flex-shrink: 0;
   transition: background 0.15s;
 }
@@ -419,7 +418,8 @@ html, body, #app {
 
 /* Scrollbar styling */
 .panel-content::-webkit-scrollbar,
-.canvas-container::-webkit-scrollbar {
+.canvas-container::-webkit-scrollbar,
+.code-textarea::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
@@ -429,14 +429,20 @@ html, body, #app {
   background: transparent;
 }
 
+.code-textarea::-webkit-scrollbar-track {
+  background: var(--bg-input, #1a1a1a);
+}
+
 .panel-content::-webkit-scrollbar-thumb,
-.canvas-container::-webkit-scrollbar-thumb {
+.canvas-container::-webkit-scrollbar-thumb,
+.code-textarea::-webkit-scrollbar-thumb {
   background: var(--border-color);
   border-radius: 4px;
 }
 
 .panel-content::-webkit-scrollbar-thumb:hover,
-.canvas-container::-webkit-scrollbar-thumb:hover {
+.canvas-container::-webkit-scrollbar-thumb:hover,
+.code-textarea::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
 }
 
@@ -922,10 +928,28 @@ html, body, #app {
 }
 
 .script-editor-area {
-    flex: 1;
-    min-height: 200px;
+    height: 200px;
     padding: 8px;
-    overflow: auto;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+}
+
+.script-editor-area .code-textarea {
+    flex: 1;
+    resize: none;
+    min-height: 0;
+}
+
+.script-resizer {
+    height: 6px;
+    background: var(--border-color, #333);
+    flex-shrink: 0;
+}
+
+.script-resizer:hover {
+    background: var(--accent-color, #4a9eff);
 }
 
 .code-textarea {
@@ -938,9 +962,10 @@ html, body, #app {
     padding: 8px;
     font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
     font-size: 13px;
-    resize: vertical;
+    resize: none;
     box-sizing: border-box;
     line-height: 1.5;
+    overflow: auto;
 }
 
 .script-actions {

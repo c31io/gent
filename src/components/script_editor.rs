@@ -175,6 +175,12 @@ pub fn ScriptEditor() -> impl IntoView {
     let (error, set_error) = signal(Option::<String>::None);
     let (running, set_running) = signal(false);
 
+    // Editor height for resizer
+    let (editor_height, set_editor_height) = signal(200i32);
+    let (resizing, set_resizing) = signal(false);
+    let (resize_start_y, set_resize_start_y) = signal(0i32);
+    let (resize_start_height, set_resize_start_height) = signal(0i32);
+
     // Load script list on mount
     spawn_local(async move {
         set_loading.set(true);
@@ -332,8 +338,37 @@ pub fn ScriptEditor() -> impl IntoView {
         }
     };
 
+    // Resizer handlers
+    let handle_resizer_mouse_down = move |ev: web_sys::MouseEvent| {
+        ev.prevent_default();
+        set_resizing.set(true);
+        set_resize_start_y.set(ev.client_y() as i32);
+        set_resize_start_height.set(editor_height.get());
+    };
+
+    let handle_mouse_up = move |_ev: web_sys::MouseEvent| {
+        set_resizing.set(false);
+    };
+
+    let handle_editor_mouseleave = move |_ev: web_sys::MouseEvent| {
+        set_resizing.set(false);
+    };
+
+    let handle_editor_mousemove = move |ev: web_sys::MouseEvent| {
+        if resizing.get() {
+            let delta = ev.client_y() as i32 - resize_start_y.get();
+            let new_height = (resize_start_height.get() + delta).max(100).min(600);
+            set_editor_height.set(new_height);
+        }
+    };
+
     view! {
-        <div class="script-editor">
+        <div
+            class="script-editor"
+            on:mousemove={handle_editor_mousemove}
+            on:mouseup={handle_mouse_up}
+            on:mouseleave={handle_editor_mouseleave}
+        >
             <div class="panel-header">"Scripts"</div>
 
             {move || {
@@ -371,7 +406,10 @@ pub fn ScriptEditor() -> impl IntoView {
                             </div>
 
                             {/* Code editor textarea (CodeMirror integration point) */}
-                            <div class="script-editor-area">
+                            <div
+                                class="script-editor-area"
+                                style:height={move || format!("{}px", editor_height.get())}
+                            >
                                 <textarea
                                     class="code-textarea"
                                     rows="12"
@@ -381,6 +419,12 @@ pub fn ScriptEditor() -> impl IntoView {
                                     placeholder="// Select or create a script..."
                                 >{editor_content.get()}</textarea>
                             </div>
+
+                            {/* Horizontal resizer */}
+                            <div
+                                class="script-resizer"
+                                on:mousedown={handle_resizer_mouse_down}
+                            ></div>
 
                             {/* Action buttons */}
                             <div class="script-actions">
