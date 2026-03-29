@@ -2,9 +2,8 @@ use crate::plugins::errors::PluginError;
 use rune::termcolor::{ColorChoice, StandardStream};
 use rune::{Context, Diagnostics, Source, Sources, Vm};
 use serde::Serialize;
+use std::sync::Arc;
 use std::sync::OnceLock;
-
-use std::sync::Arc as StdArc;
 
 /// Unique run ID for correlating console output
 #[derive(Debug, Clone, Serialize, serde::Deserialize)]
@@ -15,15 +14,19 @@ pub struct ConsoleLine {
 }
 
 /// Global Rune engine singleton
-pub static RUNE_ENGINE: OnceLock<StdArc<RuneEngine>> = OnceLock::new();
+pub static RUNE_ENGINE: OnceLock<Arc<RuneEngine>> = OnceLock::new();
 
 #[derive(Debug)]
-pub struct RuneEngine;
+pub struct RuneEngine {
+    context: Context,
+}
 
 impl RuneEngine {
     /// Create a new RuneEngine
     pub fn new() -> Result<Self, PluginError> {
-        Ok(Self)
+        let context = Context::with_default_modules()
+            .map_err(|e| PluginError::Runtime(format!("context error: {}", e)))?;
+        Ok(Self { context })
     }
 
     /// Execute a Rune script and return console lines (compile/runtime errors)
@@ -39,18 +42,18 @@ impl RuneEngine {
             .map_err(|e| PluginError::Runtime(format!("failed to create source: {}", e)))?);
 
         let mut diagnostics = Diagnostics::new();
-        let context = Context::with_default_modules()
-            .map_err(|e| PluginError::Runtime(format!("context error: {}", e)))?;
 
-        let result = rune::prepare(&mut sources)
-            .with_context(&context)
+        // Build unit from sources (compiles the script)
+        let unit = rune::prepare(&mut sources)
+            .with_context(&self.context)
             .with_diagnostics(&mut diagnostics)
-            .build();
+            .build()
+            .map_err(|e| PluginError::Runtime(format!("vm build error: {}", e)))?;
 
         // Collect console lines
         let mut lines = Vec::new();
 
-        // Emit compile errors
+        // Emit compile errors to stderr
         if !diagnostics.is_empty() {
             let mut writer = StandardStream::stderr(ColorChoice::Auto);
             if let Err(e) = diagnostics.emit(&mut writer, &sources) {
@@ -62,24 +65,14 @@ impl RuneEngine {
             }
         }
 
-        let unit = result.map_err(|e| {
-            lines.push(ConsoleLine {
-                level: "error".into(),
-                message: format!("vm build error: {}", e),
-                run_id: run_id.into(),
-            });
-            PluginError::Runtime(format!("vm build failed: {}", e))
-        })?;
-
-        // Create a new runtime for this execution
-        let runtime = context.runtime()
+        // Create a new runtime from the cached context
+        let runtime = self.context.runtime()
             .map_err(|e| PluginError::Runtime(format!("failed to create runtime: {}", e)))?;
-        let runtime = StdArc::new(runtime);
-        let unit = StdArc::new(unit);
+        let runtime = Arc::new(runtime);
+        let unit = Arc::new(unit);
         let mut vm = Vm::new(runtime, unit);
 
-        // Convert serde_json::Value to a Rune Value
-        // For Phase 1, we pass a simple string representation
+        // Convert serde_json::Value to a String for rune
         let input_value = serde_json::to_string(&input)
             .map_err(|e| PluginError::Runtime(format!("failed to serialize input: {}", e)))?;
 
