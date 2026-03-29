@@ -2,8 +2,8 @@
 // Run with: cargo tauri dev, select hello, click Run
 
 fn process(input) {
-    println("Hello from Rune script!");
-    println(input);
+    log::println("Hello from Rune script!");
+    log::println(input);
     #{ result: "ok" }
 }
 

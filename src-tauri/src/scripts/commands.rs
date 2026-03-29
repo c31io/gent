@@ -181,16 +181,11 @@ pub async fn run_script(
     let run_id_clone = run_id.clone();
     let input_clone = input.clone();
     let lines: Vec<ConsoleLine> = tokio::task::spawn_blocking(move || {
-        eprintln!("[DEBUG] engine.run starting for run_id={}", run_id_clone);
-        let result = engine.run(&source, input_clone, &run_id_clone);
-        eprintln!("[DEBUG] engine.run result: {:?}", result.is_ok());
-        result
+        engine.run(&source, input_clone, &run_id_clone)
     })
     .await
     .map_err(|e| format!("task join error: {}", e))?
     .map_err(|e: PluginError| e.to_string())?;
-
-    eprintln!("[DEBUG] run_script returning {} lines", lines.len());
 
     // Emit each line as a Tauri event for real-time streaming
     for line in &lines {

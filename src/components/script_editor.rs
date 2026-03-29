@@ -5,7 +5,8 @@ use wasm_bindgen_futures::spawn_local;
 use wasm_bindgen_futures::JsFuture;
 
 /// Script info from list_scripts
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[wasm_bindgen]
 pub struct ScriptInfo {
     pub id: String,
     pub name: String,
@@ -14,7 +15,8 @@ pub struct ScriptInfo {
 }
 
 /// Console line from run_script
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[wasm_bindgen]
 pub struct ConsoleLine {
     pub level: String,
     pub message: String,
