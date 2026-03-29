@@ -520,6 +520,10 @@ pub fn Canvas(
         let _lw = left_w.get();
         let _rw = right_w.get();
 
+        // Track canvas dimensions so Effect re-runs after canvas resize
+        let _cw = canvas_width.get();
+        let _ch = canvas_height.get();
+
         let window = match web_sys::window() {
             Some(w) => w,
             None => return,
@@ -546,6 +550,8 @@ pub fn Canvas(
             let height = container.client_height() as u32;
             canvas_ref.set_width(width);
             canvas_ref.set_height(height);
+            set_canvas_width.set(width);
+            set_canvas_height.set(height);
         }
 
         let ctx: web_sys::CanvasRenderingContext2d = match canvas_ref.get_context("2d") {
