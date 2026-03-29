@@ -1,0 +1,8 @@
+// hello.rn — basic hello world example
+// Run with: println("Hello from Rune!")
+
+fn process(input) {
+    println("Hello from Rune script!")
+    println("Input: " + input.to_string())
+    #{ result: "ok" }
+}
