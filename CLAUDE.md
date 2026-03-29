@@ -21,9 +21,14 @@ Gent is a visual node editor for context engineering and agent orchestration —
 - **Right Panel** (`src/components/right_panel.rs`): Execution trace display
 
 ### Core Stack
-- **Leptos 0.7** with CSR (client-side rendering) via `wasm-bindgen`
+
+- **Leptos 0.8** with CSR (client-side rendering) via `wasm-bindgen`
 - **web-sys** for DOM event handling (mouse events for pan/resize)
 - **Tauri** for desktop shell
+
+### Tauri API Browser/Desktop Detection
+
+- Check `__TAURI__` via `web_sys::window()` and test with `is_undefined()` before invoking. Return user-friendly errors instead of cryptic TypeErrors in browser dev. See `plugin_manager.rs` for the pattern.
 
 ### WASM Compatibility
 - `std::time::Instant` doesn't work in WASM - use `js_sys::Date::now()` for timestamps
@@ -41,14 +46,17 @@ Gent is a visual node editor for context engineering and agent orchestration —
 - `rerouting_from` signal: Tracks which input port is being rerouted from (dims original wire)
 
 ### Canvas Interaction Patterns
+
 - Click vs drag: 5px movement threshold (`dx < 5.0 && dy < 5.0` in node.rs)
 - Port events: NO stop_propagation() - let events bubble to canvas for reliable handling
 - Trigger button: `.trigger-btn` class on node headers triggers execution
+- Node Interaction Guards: When handling node clicks, check `is_trigger_button()` and `is_text_input()` before setting selection/drag state. See `canvas.rs` click handler and `geometry.rs` helpers.
 
 ### Canvas Geometry
 
 - `src/components/canvas/geometry.rs` - DOM-based hit testing via `element_from_point()` and `data-*` attributes
 - `find_input_port_at()`, `is_port()`, `is_trigger_button()`, `get_node_id_from_event()` helpers
+- `NODE_WIDTH` in `state.rs` must stay in sync with CSS `.graph-node { width: 160px }`. Changing one without the other breaks port positions.
 
 ### Port Type Validation
 
