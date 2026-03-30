@@ -14,10 +14,23 @@ pub struct ScriptInfo {
     pub description: String,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum ConsoleLevel {
+    Info,
+    Warn,
+    Error,
+}
+
+impl Default for ConsoleLevel {
+    fn default() -> Self {
+        ConsoleLevel::Info
+    }
+}
+
 /// Console line from run_script
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ConsoleLine {
-    pub level: String,
+    pub level: ConsoleLevel,
     pub message: String,
     pub run_id: String,
 }
@@ -174,7 +187,7 @@ pub fn ScriptEditor() -> impl IntoView {
                     lines.drain(0..lines.len().saturating_sub(9999));
                 }
                 lines.push(ConsoleLine {
-                    level: "info".into(),
+                    level: ConsoleLevel::Info,
                     message: "Console ready".into(),
                     run_id: "init".into(),
                 });
@@ -471,10 +484,18 @@ pub fn ScriptEditor() -> impl IntoView {
                                 <div class="console-header">"Console"</div>
                                 <div class="console-lines">
                                     {console_lines.get().iter().map(|line| {
-                                        let cls = if line.level == "error" { "console-error" } else { "console-info" };
+                                        let cls = match line.level {
+    ConsoleLevel::Error => "console-error",
+    ConsoleLevel::Warn => "console-warn",
+    ConsoleLevel::Info => "console-info",
+};
                                         view! {
                                             <div class={cls}>
-                                                <span class="console-level">{format!("[{}]", line.level)}</span>
+                                                <span class="console-level">{format!("[{}]", match line.level {
+    ConsoleLevel::Error => "error",
+    ConsoleLevel::Warn => "warn",
+    ConsoleLevel::Info => "info",
+})}</span>
                                                 <span class="console-message">{line.message.clone()}</span>
                                             </div>
                                         }.into_any()
