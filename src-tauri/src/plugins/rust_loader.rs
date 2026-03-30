@@ -1,9 +1,28 @@
 use crate::plugins::capabilities::Capability;
 use crate::plugins::errors::PluginError;
 use crate::plugins::plugin::{Input, Manifest, Output, Plugin};
-use std::sync::Arc;
 use wasmtime::{Engine, Instance, Module, Store};
 use wasmtime_wasi::WasiCtxBuilder;
+use wasmtime_wasi::pipe::MemoryOutputPipe;
+
+/// Captures stdout/stderr from a WASI command invocation
+struct CapturedOutput {
+    stdout: MemoryOutputPipe,
+    stderr: MemoryOutputPipe,
+}
+
+impl CapturedOutput {
+    fn new() -> Self {
+        Self {
+            stdout: MemoryOutputPipe::new(4096),
+            stderr: MemoryOutputPipe::new(4096),
+        }
+    }
+
+    fn into_contents(self) -> (Vec<u8>, Vec<u8>) {
+        (self.stdout.contents().to_vec(), self.stderr.contents().to_vec())
+    }
+}
 
 /// Loader for Rust-compiled WASM plugins (wasm32-wasip2 target)
 pub struct RustWasmLoader {
@@ -25,6 +44,28 @@ impl RustWasmLoader {
         }
         wasm[0..4] == [0x00, 0x61, 0x73, 0x6d] // \0asm
     }
+}
+
+fn build_wasi_ctx(
+    plugin_id: &str,
+    input_json: &str,
+    captured: &CapturedOutput,
+) -> wasmtime_wasi::WasiCtx {
+    WasiCtxBuilder::new()
+        .args(&[plugin_id, input_json])
+        .stdout(captured.stdout.clone())
+        .stderr(captured.stderr.clone())
+        .build()
+}
+
+fn parse_output(captured: CapturedOutput) -> Result<Output, PluginError> {
+    let (stdout, _stderr) = captured.into_contents();
+    let stdout_str = String::from_utf8(stdout)
+        .map_err(|e| PluginError::Runtime(format!("invalid utf-8 from plugin stdout: {}", e)))?;
+
+    serde_json::from_str::<serde_json::Value>(&stdout_str)
+        .map(Output)
+        .map_err(|e| PluginError::Runtime(format!("invalid JSON from plugin: {}", e)))
 }
 
 impl Default for RustWasmLoader {
