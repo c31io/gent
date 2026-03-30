@@ -1,3 +1,4 @@
+use crate::tauri_invoke;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
@@ -13,10 +14,25 @@ pub struct ScriptInfo {
     pub description: String,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ConsoleLevel {
+    Info,
+    Warn,
+    Error,
+    Output,
+}
+
+impl Default for ConsoleLevel {
+    fn default() -> Self {
+        ConsoleLevel::Info
+    }
+}
+
 /// Console line from run_script
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ConsoleLine {
-    pub level: String,
+    pub level: ConsoleLevel,
     pub message: String,
     pub run_id: String,
 }
@@ -30,29 +46,8 @@ pub struct RunResult {
 
 /// Call Tauri backend to list scripts
 async fn list_scripts() -> Result<Vec<ScriptInfo>, String> {
-    let window = web_sys::window()
-        .ok_or_else(|| "failed to get window".to_string())?;
-    let tauri = js_sys::Reflect::get(&window, &"__TAURI__".into())
-        .map_err(|e| format!("__TAURI__ error: {:?}", e))?;
-    if tauri.is_undefined() {
-        return Err("Scripts only available in Tauri desktop app".to_string());
-    }
-    let core = js_sys::Reflect::get(&tauri, &"core".into())
-        .map_err(|e| format!("core error: {:?}", e))?;
-    let invoke = js_sys::Reflect::get(&core, &"invoke".into())
-        .map_err(|e| format!("invoke error: {:?}", e))?;
-
-    let args = js_sys::Array::new();
-    args.push(&"list_scripts".into());
-    args.push(&js_sys::Object::new());
-
-    let promise: js_sys::Promise = js_sys::Reflect::apply(&invoke.into(), &wasm_bindgen::JsValue::UNDEFINED, &args)
-        .map_err(|e| format!("apply error: {:?}", e))?
-        .dyn_into()
-        .map_err(|e| format!("not a promise: {:?}", e))?;
-
-    let js_value = JsFuture::from(promise).await
-        .map_err(|e| format!("promise error: {:?}", e))?;
+    let opts = js_sys::Object::new();
+    let js_value = tauri_invoke::invoke("list_scripts".into(), &opts).await?;
     let scripts: Vec<ScriptInfo> = serde_wasm_bindgen::from_value(js_value)
         .map_err(|e| format!("deser error: {:?}", e))?;
     Ok(scripts)
@@ -60,36 +55,13 @@ async fn list_scripts() -> Result<Vec<ScriptInfo>, String> {
 
 /// Call Tauri backend to read a script
 async fn read_script(id: String) -> Result<String, String> {
-    let window = web_sys::window()
-        .ok_or_else(|| "failed to get window".to_string())?;
-    let tauri = js_sys::Reflect::get(&window, &"__TAURI__".into())
-        .map_err(|e| format!("__TAURI__ error: {:?}", e))?;
-    if tauri.is_undefined() {
-        return Err("Scripts only available in Tauri desktop app".to_string());
-    }
-    let core = js_sys::Reflect::get(&tauri, &"core".into())
-        .map_err(|e| format!("core error: {:?}", e))?;
-    let invoke = js_sys::Reflect::get(&core, &"invoke".into())
-        .map_err(|e| format!("invoke error: {:?}", e))?;
-
-    let args = js_sys::Array::new();
-    args.push(&"read_script".into());
     let opts = js_sys::Object::new();
     js_sys::Reflect::set(&opts, &"id".into(), &id.into())
         .map_err(|e| format!("set error: {:?}", e))?;
-    args.push(&opts);
-
-    let promise: js_sys::Promise = js_sys::Reflect::apply(&invoke.into(), &wasm_bindgen::JsValue::UNDEFINED, &args)
-        .map_err(|e| format!("apply error: {:?}", e))?
-        .dyn_into()
-        .map_err(|e| format!("not a promise: {:?}", e))?;
-
-    let js_value = JsFuture::from(promise).await
-        .map_err(|e| format!("promise error: {:?}", e))?;
+    let js_value = tauri_invoke::invoke("read_script".into(), &opts).await?;
 
     #[derive(serde::Deserialize)]
     struct Content { source: String }
-
     let content: Content = serde_wasm_bindgen::from_value(js_value)
         .map_err(|e| format!("deser error: {:?}", e))?;
     Ok(content.source)
@@ -97,68 +69,24 @@ async fn read_script(id: String) -> Result<String, String> {
 
 /// Call Tauri backend to save a script
 async fn save_script(id: String, content: String) -> Result<(), String> {
-    let window = web_sys::window()
-        .ok_or_else(|| "failed to get window".to_string())?;
-    let tauri = js_sys::Reflect::get(&window, &"__TAURI__".into())
-        .map_err(|e| format!("__TAURI__ error: {:?}", e))?;
-    if tauri.is_undefined() {
-        return Err("Scripts only available in Tauri desktop app".to_string());
-    }
-    let core = js_sys::Reflect::get(&tauri, &"core".into())
-        .map_err(|e| format!("core error: {:?}", e))?;
-    let invoke = js_sys::Reflect::get(&core, &"invoke".into())
-        .map_err(|e| format!("invoke error: {:?}", e))?;
-
-    let args = js_sys::Array::new();
-    args.push(&"save_script".into());
     let opts = js_sys::Object::new();
     js_sys::Reflect::set(&opts, &"id".into(), &id.into())
         .map_err(|e| format!("set error: {:?}", e))?;
     js_sys::Reflect::set(&opts, &"content".into(), &content.into())
         .map_err(|e| format!("set error: {:?}", e))?;
-    args.push(&opts);
-
-    let promise: js_sys::Promise = js_sys::Reflect::apply(&invoke.into(), &wasm_bindgen::JsValue::UNDEFINED, &args)
-        .map_err(|e| format!("apply error: {:?}", e))?
-        .dyn_into()
-        .map_err(|e| format!("not a promise: {:?}", e))?;
-
-    JsFuture::from(promise).await
-        .map_err(|e| format!("promise error: {:?}", e))?;
+    tauri_invoke::invoke("save_script".into(), &opts).await?;
     Ok(())
 }
 
 /// Call Tauri backend to run a script
 async fn run_script(id: String) -> Result<RunResult, String> {
-    let window = web_sys::window()
-        .ok_or_else(|| "failed to get window".to_string())?;
-    let tauri = js_sys::Reflect::get(&window, &"__TAURI__".into())
-        .map_err(|e| format!("__TAURI__ error: {:?}", e))?;
-    if tauri.is_undefined() {
-        return Err("Scripts only available in Tauri desktop app".to_string());
-    }
-    let core = js_sys::Reflect::get(&tauri, &"core".into())
-        .map_err(|e| format!("core error: {:?}", e))?;
-    let invoke = js_sys::Reflect::get(&core, &"invoke".into())
-        .map_err(|e| format!("invoke error: {:?}", e))?;
-
-    let args = js_sys::Array::new();
-    args.push(&"run_script".into());
     let opts = js_sys::Object::new();
     js_sys::Reflect::set(&opts, &"id".into(), &id.into())
         .map_err(|e| format!("set error: {:?}", e))?;
     let empty_input = JsValue::from(js_sys::Object::new());
     js_sys::Reflect::set(&opts, &"input".into(), &empty_input)
         .map_err(|e| format!("set error: {:?}", e))?;
-    args.push(&opts);
-
-    let promise: js_sys::Promise = js_sys::Reflect::apply(&invoke.into(), &wasm_bindgen::JsValue::UNDEFINED, &args)
-        .map_err(|e| format!("apply error: {:?}", e))?
-        .dyn_into()
-        .map_err(|e| format!("not a promise: {:?}", e))?;
-
-    let js_value = JsFuture::from(promise).await
-        .map_err(|e| format!("promise error: {:?}", e))?;
+    let js_value = tauri_invoke::invoke("run_script".into(), &opts).await?;
     let result: RunResult = serde_wasm_bindgen::from_value(js_value)
         .map_err(|e| format!("deser error: {:?}", e))?;
     Ok(result)
@@ -247,6 +175,9 @@ pub fn ScriptEditor() -> impl IntoView {
             let cb = wasm_bindgen::closure::Closure::wrap(Box::new(move |line: JsValue| {
                 if let Ok(cl) = serde_wasm_bindgen::from_value::<ConsoleLine>(line) {
                     set_console_lines.update(|lines| {
+                        if lines.len() >= 10000 {
+                            lines.drain(0..lines.len().saturating_sub(9999));
+                        }
                         lines.push(cl);
                     });
                 }
@@ -254,8 +185,11 @@ pub fn ScriptEditor() -> impl IntoView {
             cb.forget();
 
             set_console_lines.update(|lines| {
+                if lines.len() >= 10000 {
+                    lines.drain(0..lines.len().saturating_sub(9999));
+                }
                 lines.push(ConsoleLine {
-                    level: "info".into(),
+                    level: ConsoleLevel::Info,
                     message: "Console ready".into(),
                     run_id: "init".into(),
                 });
@@ -384,25 +318,12 @@ pub fn ScriptEditor() -> impl IntoView {
         }
     };
 
-    // Initialize CodeMirror when DOM is ready
-    let init_editor = move || {
-        let set_editor_content = set_editor_content.clone();
-        let set_codemirror_editor = set_codemirror_editor.clone();
-        let pending_content = pending_content.clone();
-
+    // Initialize CodeMirror when DOM is ready.
+    // Content is already loaded by the time this runs (set in mount spawn_local).
+    // Use request_animation_frame to defer DOM init until after the view paints.
+    let initial_content = pending_content.get_untracked().unwrap_or_default();
+    request_animation_frame(move || {
         spawn_local(async move {
-            // Wait for pending content to be set (first script loaded)
-            // Poll until we have content (max 50 attempts with 100ms delay)
-            let mut initial_content = String::new();
-            for _ in 0..50 {
-                if let Some(content) = pending_content.get() {
-                    initial_content = content;
-                    break;
-                }
-                // Yield to event loop to let other tasks run
-                gloo_timers::future::TimeoutFuture::new(100).await;
-            }
-
             let document = match web_sys::window().and_then(|w| w.document()) {
                 Some(d) => d,
                 None => return,
@@ -467,9 +388,7 @@ pub fn ScriptEditor() -> impl IntoView {
                 callback.forget();
             }
         });
-    };
-
-    init_editor();
+    });
 
     view! {
         <div
@@ -552,10 +471,20 @@ pub fn ScriptEditor() -> impl IntoView {
                                 <div class="console-header">"Console"</div>
                                 <div class="console-lines">
                                     {console_lines.get().iter().map(|line| {
-                                        let cls = if line.level == "error" { "console-error" } else { "console-info" };
+                                        let cls = match line.level {
+    ConsoleLevel::Error => "console-error",
+    ConsoleLevel::Warn => "console-warn",
+    ConsoleLevel::Info => "console-info",
+    ConsoleLevel::Output => "console-info",
+};
                                         view! {
                                             <div class={cls}>
-                                                <span class="console-level">{format!("[{}]", line.level)}</span>
+                                                <span class="console-level">{format!("[{}]", match &line.level {
+    ConsoleLevel::Error => "error",
+    ConsoleLevel::Warn => "warn",
+    ConsoleLevel::Info => "info",
+    ConsoleLevel::Output => "output",
+})}</span>
                                                 <span class="console-message">{line.message.clone()}</span>
                                             </div>
                                         }.into_any()
