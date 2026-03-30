@@ -26,9 +26,7 @@
 
 Add after existing imports:
 ```rust
-use std::sync::Mutex;
-use wasmtime_wasi::WasiCtxBuilder;
-use wasmtime_wasi::pipe::{MemoryOutputPipe, Sink};
+use wasmtime_wasi::pipe::MemoryOutputPipe;
 ```
 
 - [ ] **Step 2: Add stdout capture struct**
@@ -37,24 +35,20 @@ Add before `RustWasmLoader`:
 ```rust
 /// Captures stdout/stderr from a WASI command invocation
 struct CapturedOutput {
-    pub stdout: Mutex<Vec<u8>>,
-    pub stderr: Mutex<Vec<u8>>,
+    stdout: MemoryOutputPipe,
+    stderr: MemoryOutputPipe,
 }
 
 impl CapturedOutput {
     fn new() -> Self {
         Self {
-            stdout: Mutex::new(Vec::new()),
-            stderr: Mutex::new(Vec::new()),
+            stdout: MemoryOutputPipe::new(4096),
+            stderr: MemoryOutputPipe::new(4096),
         }
     }
 
-    fn stdout_pipe(&self) -> MemoryOutputPipe {
-        MemoryOutputPipe::new(self.stdout.lock().unwrap())
-    }
-
-    fn stderr_pipe(&self) -> MemoryOutputPipe {
-        MemoryOutputPipe::new(self.stderr.lock().unwrap())
+    fn into_contents(self) -> (Vec<u8>, Vec<u8>) {
+        (self.stdout.contents().to_vec(), self.stderr.contents().to_vec())
     }
 }
 ```
@@ -70,8 +64,8 @@ fn build_wasi_ctx(
 ) -> wasmtime_wasi::WasiCtx {
     WasiCtxBuilder::new()
         .args(&[plugin_id, input_json])
-        .stdout(MemoryOutputPipe::new(captured.stdout.lock().unwrap()))
-        .stderr(MemoryOutputPipe::new(captured.stderr.lock().unwrap()))
+        .stdout(captured.stdout.clone())
+        .stderr(captured.stderr.clone())
         .build()
 }
 ```
@@ -80,9 +74,9 @@ fn build_wasi_ctx(
 
 Add after `build_wasi_ctx`:
 ```rust
-fn parse_output(captured: &CapturedOutput) -> Result<Output, PluginError> {
-    let stdout = captured.stdout.lock().unwrap();
-    let stdout_str = String::from_utf8(stdout.clone())
+fn parse_output(captured: CapturedOutput) -> Result<Output, PluginError> {
+    let (stdout, _stderr) = captured.into_contents();
+    let stdout_str = String::from_utf8(stdout)
         .map_err(|e| PluginError::Runtime(format!("invalid utf-8 from plugin stdout: {}", e)))?;
 
     serde_json::from_str::<serde_json::Value>(&stdout_str)
@@ -146,7 +140,7 @@ fn process(&self, input: Input) -> Result<Output, PluginError> {
     start.call(&mut store, ())
         .map_err(|e| PluginError::Runtime(format!("plugin execution failed: {}", e)))?;
 
-    parse_output(&captured)
+    parse_output(captured)
 }
 ```
 
