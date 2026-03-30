@@ -427,7 +427,7 @@ pub fn ScriptEditor() -> impl IntoView {
 
             let options = js_sys::Object::new();
             let _ = js_sys::Reflect::set(&options, &"value".into(), &initial_content.clone().into());
-            let _ = js_sys::Reflect::set(&options, &"mode".into(), &"javascript".into());
+            let _ = js_sys::Reflect::set(&options, &"mode".into(), &"rust".into());
             let _ = js_sys::Reflect::set(&options, &"theme".into(), &"dracula".into());
             let _ = js_sys::Reflect::set(&options, &"lineNumbers".into(), &true.into());
             let _ = js_sys::Reflect::set(&options, &"tabSize".into(), &2.into());
