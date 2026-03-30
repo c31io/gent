@@ -27,6 +27,7 @@
 Add after existing imports:
 ```rust
 use wasmtime_wasi::pipe::MemoryOutputPipe;
+use wasmtime_wasi::preview1::WasiP1Ctx;
 ```
 
 - [ ] **Step 2: Add stdout capture struct**
@@ -61,12 +62,12 @@ fn build_wasi_ctx(
     plugin_id: &str,
     input_json: &str,
     captured: &CapturedOutput,
-) -> wasmtime_wasi::WasiCtx {
+) -> WasiP1Ctx {
     WasiCtxBuilder::new()
         .args(&[plugin_id, input_json])
         .stdout(captured.stdout.clone())
         .stderr(captured.stderr.clone())
-        .build()
+        .build_p1()
 }
 ```
 
@@ -104,8 +105,8 @@ git commit -m "feat(plugins): add WASI stdout capture helpers"
 
 Add to imports at top:
 ```rust
-use wasmtime::{linker::Linker, Instance, Store};
-use wasmtime_wasi::Wasi;
+use wasmtime::{Engine, Linker, Module, Store};
+use wasmtime_wasi::preview1::WasiP1Ctx;
 ```
 
 - [ ] **Step 2: Implement process() - exit code via error propagation**
@@ -122,8 +123,9 @@ fn process(&self, input: Input) -> Result<Output, PluginError> {
     let mut store = Store::new(&self.engine, wasi);
 
     // Set up WASI linking
-    let mut linker = Linker::new(&self.engine);
-    Wasi::add_to_linker(&mut linker, |ctx| ctx)?;
+    let mut linker: Linker<WasiP1Ctx> = Linker::new(&self.engine);
+    wasmtime_wasi::preview1::add_to_linker_sync(&mut linker, |cx| cx)
+        .map_err(|e| PluginError::Runtime(format!("failed to set up WASI: {}", e)))?;
 
     // Instantiate - WASI imports are auto-linked via the linker
     let instance = linker

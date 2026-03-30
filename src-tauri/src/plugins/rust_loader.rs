@@ -36,9 +36,8 @@ impl RustWasmLoader {
         Ok(Self { engine })
     }
 
-    /// Check if bytes appear to be a Rust-compiled WASM module
-    /// Rust WASM uses wasm32-wasip2 target with "wasi" module name
-    fn is_rust_wasm(wasm: &[u8]) -> bool {
+    /// Check if bytes appear to be a valid WASM module
+    fn is_wasm(wasm: &[u8]) -> bool {
         // Check for WASM magic number
         if wasm.len() < 4 {
             return false;
@@ -77,7 +76,7 @@ impl Default for RustWasmLoader {
 
 impl super::WasmLoader for RustWasmLoader {
     fn can_load(&self, wasm: &[u8]) -> bool {
-        Self::is_rust_wasm(wasm)
+        Self::is_wasm(wasm)
     }
 
     fn load(
