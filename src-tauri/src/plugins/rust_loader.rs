@@ -97,7 +97,7 @@ impl super::WasmLoader for RustWasmLoader {
         let plugin = RustWasmPlugin {
             engine: self.engine.clone(),
             module,
-            manifest: Manifest::default(), // Will be extracted from WASM
+            manifest: Manifest::default(),
             capabilities: capabilities.to_vec(),
         };
 
