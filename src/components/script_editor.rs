@@ -15,10 +15,12 @@ pub struct ScriptInfo {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ConsoleLevel {
     Info,
     Warn,
     Error,
+    Output,
 }
 
 impl Default for ConsoleLevel {
@@ -488,13 +490,15 @@ pub fn ScriptEditor() -> impl IntoView {
     ConsoleLevel::Error => "console-error",
     ConsoleLevel::Warn => "console-warn",
     ConsoleLevel::Info => "console-info",
+    ConsoleLevel::Output => "console-info",
 };
                                         view! {
                                             <div class={cls}>
-                                                <span class="console-level">{format!("[{}]", match line.level {
+                                                <span class="console-level">{format!("[{}]", match &line.level {
     ConsoleLevel::Error => "error",
     ConsoleLevel::Warn => "warn",
     ConsoleLevel::Info => "info",
+    ConsoleLevel::Output => "output",
 })}</span>
                                                 <span class="console-message">{line.message.clone()}</span>
                                             </div>
