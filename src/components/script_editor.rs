@@ -1,3 +1,4 @@
+use crate::tauri_invoke;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
@@ -30,29 +31,8 @@ pub struct RunResult {
 
 /// Call Tauri backend to list scripts
 async fn list_scripts() -> Result<Vec<ScriptInfo>, String> {
-    let window = web_sys::window()
-        .ok_or_else(|| "failed to get window".to_string())?;
-    let tauri = js_sys::Reflect::get(&window, &"__TAURI__".into())
-        .map_err(|e| format!("__TAURI__ error: {:?}", e))?;
-    if tauri.is_undefined() {
-        return Err("Scripts only available in Tauri desktop app".to_string());
-    }
-    let core = js_sys::Reflect::get(&tauri, &"core".into())
-        .map_err(|e| format!("core error: {:?}", e))?;
-    let invoke = js_sys::Reflect::get(&core, &"invoke".into())
-        .map_err(|e| format!("invoke error: {:?}", e))?;
-
-    let args = js_sys::Array::new();
-    args.push(&"list_scripts".into());
-    args.push(&js_sys::Object::new());
-
-    let promise: js_sys::Promise = js_sys::Reflect::apply(&invoke.into(), &wasm_bindgen::JsValue::UNDEFINED, &args)
-        .map_err(|e| format!("apply error: {:?}", e))?
-        .dyn_into()
-        .map_err(|e| format!("not a promise: {:?}", e))?;
-
-    let js_value = JsFuture::from(promise).await
-        .map_err(|e| format!("promise error: {:?}", e))?;
+    let opts = js_sys::Object::new();
+    let js_value = tauri_invoke::invoke("list_scripts".into(), &opts).await?;
     let scripts: Vec<ScriptInfo> = serde_wasm_bindgen::from_value(js_value)
         .map_err(|e| format!("deser error: {:?}", e))?;
     Ok(scripts)
@@ -60,36 +40,13 @@ async fn list_scripts() -> Result<Vec<ScriptInfo>, String> {
 
 /// Call Tauri backend to read a script
 async fn read_script(id: String) -> Result<String, String> {
-    let window = web_sys::window()
-        .ok_or_else(|| "failed to get window".to_string())?;
-    let tauri = js_sys::Reflect::get(&window, &"__TAURI__".into())
-        .map_err(|e| format!("__TAURI__ error: {:?}", e))?;
-    if tauri.is_undefined() {
-        return Err("Scripts only available in Tauri desktop app".to_string());
-    }
-    let core = js_sys::Reflect::get(&tauri, &"core".into())
-        .map_err(|e| format!("core error: {:?}", e))?;
-    let invoke = js_sys::Reflect::get(&core, &"invoke".into())
-        .map_err(|e| format!("invoke error: {:?}", e))?;
-
-    let args = js_sys::Array::new();
-    args.push(&"read_script".into());
     let opts = js_sys::Object::new();
     js_sys::Reflect::set(&opts, &"id".into(), &id.into())
         .map_err(|e| format!("set error: {:?}", e))?;
-    args.push(&opts);
-
-    let promise: js_sys::Promise = js_sys::Reflect::apply(&invoke.into(), &wasm_bindgen::JsValue::UNDEFINED, &args)
-        .map_err(|e| format!("apply error: {:?}", e))?
-        .dyn_into()
-        .map_err(|e| format!("not a promise: {:?}", e))?;
-
-    let js_value = JsFuture::from(promise).await
-        .map_err(|e| format!("promise error: {:?}", e))?;
+    let js_value = tauri_invoke::invoke("read_script".into(), &opts).await?;
 
     #[derive(serde::Deserialize)]
     struct Content { source: String }
-
     let content: Content = serde_wasm_bindgen::from_value(js_value)
         .map_err(|e| format!("deser error: {:?}", e))?;
     Ok(content.source)
@@ -97,68 +54,24 @@ async fn read_script(id: String) -> Result<String, String> {
 
 /// Call Tauri backend to save a script
 async fn save_script(id: String, content: String) -> Result<(), String> {
-    let window = web_sys::window()
-        .ok_or_else(|| "failed to get window".to_string())?;
-    let tauri = js_sys::Reflect::get(&window, &"__TAURI__".into())
-        .map_err(|e| format!("__TAURI__ error: {:?}", e))?;
-    if tauri.is_undefined() {
-        return Err("Scripts only available in Tauri desktop app".to_string());
-    }
-    let core = js_sys::Reflect::get(&tauri, &"core".into())
-        .map_err(|e| format!("core error: {:?}", e))?;
-    let invoke = js_sys::Reflect::get(&core, &"invoke".into())
-        .map_err(|e| format!("invoke error: {:?}", e))?;
-
-    let args = js_sys::Array::new();
-    args.push(&"save_script".into());
     let opts = js_sys::Object::new();
     js_sys::Reflect::set(&opts, &"id".into(), &id.into())
         .map_err(|e| format!("set error: {:?}", e))?;
     js_sys::Reflect::set(&opts, &"content".into(), &content.into())
         .map_err(|e| format!("set error: {:?}", e))?;
-    args.push(&opts);
-
-    let promise: js_sys::Promise = js_sys::Reflect::apply(&invoke.into(), &wasm_bindgen::JsValue::UNDEFINED, &args)
-        .map_err(|e| format!("apply error: {:?}", e))?
-        .dyn_into()
-        .map_err(|e| format!("not a promise: {:?}", e))?;
-
-    JsFuture::from(promise).await
-        .map_err(|e| format!("promise error: {:?}", e))?;
+    tauri_invoke::invoke("save_script".into(), &opts).await?;
     Ok(())
 }
 
 /// Call Tauri backend to run a script
 async fn run_script(id: String) -> Result<RunResult, String> {
-    let window = web_sys::window()
-        .ok_or_else(|| "failed to get window".to_string())?;
-    let tauri = js_sys::Reflect::get(&window, &"__TAURI__".into())
-        .map_err(|e| format!("__TAURI__ error: {:?}", e))?;
-    if tauri.is_undefined() {
-        return Err("Scripts only available in Tauri desktop app".to_string());
-    }
-    let core = js_sys::Reflect::get(&tauri, &"core".into())
-        .map_err(|e| format!("core error: {:?}", e))?;
-    let invoke = js_sys::Reflect::get(&core, &"invoke".into())
-        .map_err(|e| format!("invoke error: {:?}", e))?;
-
-    let args = js_sys::Array::new();
-    args.push(&"run_script".into());
     let opts = js_sys::Object::new();
     js_sys::Reflect::set(&opts, &"id".into(), &id.into())
         .map_err(|e| format!("set error: {:?}", e))?;
     let empty_input = JsValue::from(js_sys::Object::new());
     js_sys::Reflect::set(&opts, &"input".into(), &empty_input)
         .map_err(|e| format!("set error: {:?}", e))?;
-    args.push(&opts);
-
-    let promise: js_sys::Promise = js_sys::Reflect::apply(&invoke.into(), &wasm_bindgen::JsValue::UNDEFINED, &args)
-        .map_err(|e| format!("apply error: {:?}", e))?
-        .dyn_into()
-        .map_err(|e| format!("not a promise: {:?}", e))?;
-
-    let js_value = JsFuture::from(promise).await
-        .map_err(|e| format!("promise error: {:?}", e))?;
+    let js_value = tauri_invoke::invoke("run_script".into(), &opts).await?;
     let result: RunResult = serde_wasm_bindgen::from_value(js_value)
         .map_err(|e| format!("deser error: {:?}", e))?;
     Ok(result)

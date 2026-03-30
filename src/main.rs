@@ -1,3 +1,4 @@
+mod tauri_invoke;
 mod app;
 mod components;
 
