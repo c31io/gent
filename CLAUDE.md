@@ -34,6 +34,24 @@ Gent is a visual node editor for context engineering and agent orchestration —
 - `std::time::Instant` doesn't work in WASM - use `js_sys::Date::now()` for timestamps
 - `Timestamp` struct in execution_engine.rs wraps this pattern
 
+### Leptos 0.8 Lifecycle / Mount Hooks
+
+**`on_mount` does not exist in Leptos 0.8.** There is no `componentDidMount` equivalent.
+
+For deferred initialization, call `spawn_local` at component top level — it runs when the component is instantiated:
+```rust
+#[component]
+pub fn MyComponent() -> impl IntoView {
+    spawn_local(async {
+        // runs after component is created
+        do_something().await;
+    });
+    view! { ... }
+}
+```
+
+For cleanup, use `leptos::prelude::on_cleanup` (runs when component is destroyed).
+
 ### Key Components
 - `AppLayout` (`app_layout.rs`): Manages panel sizes via Leptos signals, handles divider drag-to-resize
 - `Canvas` (`canvas.rs`): Renders `GraphNode` components, handles pan (mouse drag) and zoom (scroll wheel)

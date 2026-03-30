@@ -10,6 +10,11 @@ mod plugins;
 pub mod scripts;
 
 #[tauri::command]
+fn show_main_window(window: tauri::Window) -> Result<(), String> {
+    window.show().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn execute_code(code: String) -> Result<String, String> {
     // Run via sh on mac/linux, cmd on windows
     #[cfg(target_os = "windows")]
@@ -52,6 +57,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(plugin_state)
         .invoke_handler(tauri::generate_handler![
+            show_main_window,
             execute_code,
             load_plugin,
             list_plugins,
