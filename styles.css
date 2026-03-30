@@ -419,13 +419,17 @@ html, body, #app {
 /* Scrollbar styling */
 .panel-content::-webkit-scrollbar,
 .canvas-container::-webkit-scrollbar,
-.code-textarea::-webkit-scrollbar {
+.code-textarea::-webkit-scrollbar,
+.codemirror-container .CodeMirror .CodeMirror-vscrollbar::-webkit-scrollbar,
+.codemirror-container .CodeMirror .CodeMirror-hscrollbar::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 .panel-content::-webkit-scrollbar-track,
-.canvas-container::-webkit-scrollbar-track {
+.canvas-container::-webkit-scrollbar-track,
+.codemirror-container .CodeMirror .CodeMirror-vscrollbar::-webkit-scrollbar-track,
+.codemirror-container .CodeMirror .CodeMirror-hscrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
 
@@ -435,14 +439,18 @@ html, body, #app {
 
 .panel-content::-webkit-scrollbar-thumb,
 .canvas-container::-webkit-scrollbar-thumb,
-.code-textarea::-webkit-scrollbar-thumb {
+.code-textarea::-webkit-scrollbar-thumb,
+.codemirror-container .CodeMirror .CodeMirror-vscrollbar::-webkit-scrollbar-thumb,
+.codemirror-container .CodeMirror .CodeMirror-hscrollbar::-webkit-scrollbar-thumb {
   background: var(--border-color);
   border-radius: 4px;
 }
 
 .panel-content::-webkit-scrollbar-thumb:hover,
 .canvas-container::-webkit-scrollbar-thumb:hover,
-.code-textarea::-webkit-scrollbar-thumb:hover {
+.code-textarea::-webkit-scrollbar-thumb:hover,
+.codemirror-container .CodeMirror .CodeMirror-vscrollbar::-webkit-scrollbar-thumb:hover,
+.codemirror-container .CodeMirror .CodeMirror-hscrollbar::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
 }
 
