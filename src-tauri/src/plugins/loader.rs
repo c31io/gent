@@ -1,7 +1,7 @@
 use crate::plugins::capabilities::Capability;
 use crate::plugins::errors::PluginError;
 use crate::plugins::plugin::Plugin;
-use crate::plugins::{RuneLoader, RustWasmLoader, WasmLoader};
+use crate::plugins::{RustWasmLoader, WasmLoader};
 use std::sync::Arc;
 
 /// Registry of WASM loaders for general plugin loading (Rust WASM only)
@@ -45,14 +45,3 @@ impl Default for PluginLoader {
     }
 }
 
-/// Load the one and only Rune script engine.
-///
-/// The Rune engine is a singleton embedded in Gent, not a general plugin.
-/// Separate from PluginLoader to avoid loader detection ambiguity.
-pub fn load_rune_engine(
-    wasm: &[u8],
-    capabilities: &[Capability],
-) -> Result<Box<dyn Plugin>, PluginError> {
-    RuneLoader::new()
-        .and_then(|loader| loader.load(wasm, capabilities))
-}
