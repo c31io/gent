@@ -161,7 +161,7 @@ pub fn ScriptEditor() -> impl IntoView {
                 if let Ok(cl) = serde_wasm_bindgen::from_value::<ConsoleLine>(line) {
                     set_console_lines.update(|lines| {
                         if lines.len() >= 10000 {
-                            lines.drain(0..lines.len() - 10000);
+                            lines.drain(0..lines.len().saturating_sub(9999));
                         }
                         lines.push(cl);
                     });
@@ -171,7 +171,7 @@ pub fn ScriptEditor() -> impl IntoView {
 
             set_console_lines.update(|lines| {
                 if lines.len() >= 10000 {
-                    lines.drain(0..lines.len() - 10000);
+                    lines.drain(0..lines.len().saturating_sub(9999));
                 }
                 lines.push(ConsoleLine {
                     level: "info".into(),
