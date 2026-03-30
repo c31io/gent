@@ -318,25 +318,12 @@ pub fn ScriptEditor() -> impl IntoView {
         }
     };
 
-    // Initialize CodeMirror when DOM is ready
-    let init_editor = move || {
-        let set_editor_content = set_editor_content.clone();
-        let set_codemirror_editor = set_codemirror_editor.clone();
-        let pending_content = pending_content.clone();
-
+    // Initialize CodeMirror when DOM is ready.
+    // Content is already loaded by the time this runs (set in mount spawn_local).
+    // Use request_animation_frame to defer DOM init until after the view paints.
+    let initial_content = pending_content.get().unwrap_or_default();
+    request_animation_frame(move || {
         spawn_local(async move {
-            // Wait for pending content to be set (first script loaded)
-            // Poll until we have content (max 50 attempts with 100ms delay)
-            let mut initial_content = String::new();
-            for _ in 0..50 {
-                if let Some(content) = pending_content.get() {
-                    initial_content = content;
-                    break;
-                }
-                // Yield to event loop to let other tasks run
-                gloo_timers::future::TimeoutFuture::new(100).await;
-            }
-
             let document = match web_sys::window().and_then(|w| w.document()) {
                 Some(d) => d,
                 None => return,
@@ -401,9 +388,7 @@ pub fn ScriptEditor() -> impl IntoView {
                 callback.forget();
             }
         });
-    };
-
-    init_editor();
+    });
 
     view! {
         <div
