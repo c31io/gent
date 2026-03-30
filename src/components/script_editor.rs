@@ -174,13 +174,10 @@ pub fn ScriptEditor() -> impl IntoView {
     let (error, set_error) = signal(Option::<String>::None);
     let (running, set_running) = signal(false);
 
-    // CodeMirror editor instance for programmatic access
     let (codemirror_editor, set_codemirror_editor) = signal(Option::<JsValue>::None);
     let (editor_ready, set_editor_ready) = signal(false);
-    // Store pending content to set once editor is ready
     let (pending_content, set_pending_content) = signal(Option::<String>::None);
 
-    // Editor height for resizer
     let (editor_height, set_editor_height) = signal(200i32);
     let (resizing, set_resizing) = signal(false);
     let (resize_start_y, set_resize_start_y) = signal(0i32);
@@ -338,7 +335,6 @@ pub fn ScriptEditor() -> impl IntoView {
                 set_selected_script.set(Some(script.clone()));
                 set_console_lines.set(Vec::new());
                 let script_id = script.id.clone();
-                let codemirror_editor = codemirror_editor.clone();
                 spawn_local(async move {
                     match read_script(script_id).await {
                         Ok(source) => {
