@@ -96,6 +96,81 @@ pub fn ScriptEditor() -> impl IntoView {
     let (resize_start_y, set_resize_start_y) = signal(0i32);
     let (resize_start_height, set_resize_start_height) = signal(0i32);
 
+    // Initialize CodeMirror when DOM is ready
+    let init_editor = move || {
+        let set_editor_content = set_editor_content.clone();
+        let set_codemirror_editor = set_codemirror_editor.clone();
+        let pending_content = pending_content.clone();
+
+        spawn_local(async move {
+            let initial_content = pending_content.get().unwrap_or_default();
+
+            let document = match web_sys::window().and_then(|w| w.document()) {
+                Some(d) => d,
+                None => return,
+            };
+            let container = match document.get_element_by_id("script-codemirror") {
+                Some(e) => e,
+                None => return,
+            };
+
+            let window = match web_sys::window() {
+                Some(w) => w,
+                None => return,
+            };
+            let codemirror = match js_sys::Reflect::get(&window, &"CodeMirror".into()) {
+                Ok(cm) => cm,
+                Err(_) => return,
+            };
+
+            let options = js_sys::Object::new();
+            let _ = js_sys::Reflect::set(&options, &"value".into(), &initial_content.clone().into());
+            let _ = js_sys::Reflect::set(&options, &"mode".into(), &"rust".into());
+            let _ = js_sys::Reflect::set(&options, &"theme".into(), &"dracula".into());
+            let _ = js_sys::Reflect::set(&options, &"lineNumbers".into(), &true.into());
+            let _ = js_sys::Reflect::set(&options, &"tabSize".into(), &2.into());
+            let _ = js_sys::Reflect::set(&options, &"indentWithTabs".into(), &false.into());
+            let _ = js_sys::Reflect::set(&options, &"lineWrapping".into(), &true.into());
+            let _ = js_sys::Reflect::set(&options, &"styleActiveLine".into(), &true.into());
+
+            let args = js_sys::Array::new();
+            args.push(&container.into());
+            args.push(&options);
+
+            let editor = match js_sys::Reflect::apply(&codemirror.into(), &wasm_bindgen::JsValue::UNDEFINED, &args) {
+                Ok(e) => match e.dyn_into::<js_sys::Object>() {
+                    Ok(obj) => obj,
+                    Err(_) => return,
+                },
+                Err(_) => return,
+            };
+
+            // Store the editor instance for later access
+            set_codemirror_editor.set(Some(editor.clone().into()));
+            set_editor_ready.set(true);
+
+            // Set up change listener
+            if let Ok(on_fn) = js_sys::Reflect::get(&editor, &"on".into()) {
+                let set_editor_content = set_editor_content.clone();
+                let editor_clone = editor.clone();
+                let callback = wasm_bindgen::closure::Closure::wrap(Box::new(move |_cm: JsValue, _change_obj: JsValue| {
+                    if let Ok(get_value) = js_sys::Reflect::get(&editor_clone, &"getValue".into()) {
+                        if let Ok(value) = js_sys::Reflect::apply(&get_value.into(), &editor_clone, &js_sys::Array::new()) {
+                            if let Some(s) = value.as_string() {
+                                set_editor_content.set(s);
+                            }
+                        }
+                    }
+                }) as Box<dyn FnMut(JsValue, JsValue)>);
+                let on_args = js_sys::Array::new();
+                on_args.push(&"change".into());
+                on_args.push(&callback.as_js_value());
+                let _ = js_sys::Reflect::apply(&on_fn.into(), &editor, &on_args);
+                callback.forget();
+            }
+        });
+    };
+
     // Load script list on mount
     spawn_local(async move {
         set_loading.set(true);
@@ -109,7 +184,8 @@ pub fn ScriptEditor() -> impl IntoView {
                         Ok(source) => {
                             // Store in pending_content so init_editor can pick it up
                             set_pending_content.set(Some(source.clone()));
-                            set_editor_content.set(source);
+                            set_editor_content.set(source.clone());
+                            init_editor();
                         }
                         Err(e) => set_error.set(Some(e)),
                     }
@@ -296,93 +372,6 @@ pub fn ScriptEditor() -> impl IntoView {
             set_editor_height.set(new_height);
         }
     };
-
-    // Initialize CodeMirror when DOM is ready
-    let init_editor = move || {
-        let set_editor_content = set_editor_content.clone();
-        let set_codemirror_editor = set_codemirror_editor.clone();
-        let pending_content = pending_content.clone();
-
-        spawn_local(async move {
-            // Wait for pending content to be set (first script loaded)
-            // Poll until we have content (max 50 attempts with 100ms delay)
-            let mut initial_content = String::new();
-            for _ in 0..50 {
-                if let Some(content) = pending_content.get() {
-                    initial_content = content;
-                    break;
-                }
-                // Yield to event loop to let other tasks run
-                gloo_timers::future::TimeoutFuture::new(100).await;
-            }
-
-            let document = match web_sys::window().and_then(|w| w.document()) {
-                Some(d) => d,
-                None => return,
-            };
-            let container = match document.get_element_by_id("script-codemirror") {
-                Some(e) => e,
-                None => return,
-            };
-
-            let window = match web_sys::window() {
-                Some(w) => w,
-                None => return,
-            };
-            let codemirror = match js_sys::Reflect::get(&window, &"CodeMirror".into()) {
-                Ok(cm) => cm,
-                Err(_) => return,
-            };
-
-            let options = js_sys::Object::new();
-            let _ = js_sys::Reflect::set(&options, &"value".into(), &initial_content.clone().into());
-            let _ = js_sys::Reflect::set(&options, &"mode".into(), &"rust".into());
-            let _ = js_sys::Reflect::set(&options, &"theme".into(), &"dracula".into());
-            let _ = js_sys::Reflect::set(&options, &"lineNumbers".into(), &true.into());
-            let _ = js_sys::Reflect::set(&options, &"tabSize".into(), &2.into());
-            let _ = js_sys::Reflect::set(&options, &"indentWithTabs".into(), &false.into());
-            let _ = js_sys::Reflect::set(&options, &"lineWrapping".into(), &true.into());
-            let _ = js_sys::Reflect::set(&options, &"styleActiveLine".into(), &true.into());
-
-            let args = js_sys::Array::new();
-            args.push(&container.into());
-            args.push(&options);
-
-            let editor = match js_sys::Reflect::apply(&codemirror.into(), &wasm_bindgen::JsValue::UNDEFINED, &args) {
-                Ok(e) => match e.dyn_into::<js_sys::Object>() {
-                    Ok(obj) => obj,
-                    Err(_) => return,
-                },
-                Err(_) => return,
-            };
-
-            // Store the editor instance for later access
-            set_codemirror_editor.set(Some(editor.clone().into()));
-            set_editor_ready.set(true);
-
-            // Set up change listener
-            if let Ok(on_fn) = js_sys::Reflect::get(&editor, &"on".into()) {
-                let set_editor_content = set_editor_content.clone();
-                let editor_clone = editor.clone();
-                let callback = wasm_bindgen::closure::Closure::wrap(Box::new(move |_cm: JsValue, _change_obj: JsValue| {
-                    if let Ok(get_value) = js_sys::Reflect::get(&editor_clone, &"getValue".into()) {
-                        if let Ok(value) = js_sys::Reflect::apply(&get_value.into(), &editor_clone, &js_sys::Array::new()) {
-                            if let Some(s) = value.as_string() {
-                                set_editor_content.set(s);
-                            }
-                        }
-                    }
-                }) as Box<dyn FnMut(JsValue, JsValue)>);
-                let on_args = js_sys::Array::new();
-                on_args.push(&"change".into());
-                on_args.push(&callback.as_js_value());
-                let _ = js_sys::Reflect::apply(&on_fn.into(), &editor, &on_args);
-                callback.forget();
-            }
-        });
-    };
-
-    init_editor();
 
     view! {
         <div
