@@ -321,7 +321,7 @@ pub fn ScriptEditor() -> impl IntoView {
     // Initialize CodeMirror when DOM is ready.
     // Content is already loaded by the time this runs (set in mount spawn_local).
     // Use request_animation_frame to defer DOM init until after the view paints.
-    let initial_content = pending_content.get().unwrap_or_default();
+    let initial_content = pending_content.get_untracked().unwrap_or_default();
     request_animation_frame(move || {
         spawn_local(async move {
             let document = match web_sys::window().and_then(|w| w.document()) {
