@@ -147,7 +147,6 @@ async fn run_script(id: String) -> Result<RunResult, String> {
     let opts = js_sys::Object::new();
     js_sys::Reflect::set(&opts, &"id".into(), &id.into())
         .map_err(|e| format!("set error: {:?}", e))?;
-    // Create empty object as input
     let empty_input = JsValue::from(js_sys::Object::new());
     js_sys::Reflect::set(&opts, &"input".into(), &empty_input)
         .map_err(|e| format!("set error: {:?}", e))?;
@@ -175,7 +174,10 @@ pub fn ScriptEditor() -> impl IntoView {
     let (error, set_error) = signal(Option::<String>::None);
     let (running, set_running) = signal(false);
 
-    // Editor height for resizer
+    let (codemirror_editor, set_codemirror_editor) = signal(Option::<JsValue>::None);
+    let (editor_ready, set_editor_ready) = signal(false);
+    let (pending_content, set_pending_content) = signal(Option::<String>::None);
+
     let (editor_height, set_editor_height) = signal(200i32);
     let (resizing, set_resizing) = signal(false);
     let (resize_start_y, set_resize_start_y) = signal(0i32);
@@ -186,13 +188,16 @@ pub fn ScriptEditor() -> impl IntoView {
         set_loading.set(true);
         match list_scripts().await {
             Ok(list) => {
-                // Auto-select first script if available (before moving list)
                 let first_script = list.first().cloned();
                 set_scripts.set(list);
                 if let Some(first) = first_script {
                     set_selected_script.set(Some(first.clone()));
                     match read_script(first.id.clone()).await {
-                        Ok(source) => set_editor_content.set(source),
+                        Ok(source) => {
+                            // Store in pending_content so init_editor can pick it up
+                            set_pending_content.set(Some(source.clone()));
+                            set_editor_content.set(source);
+                        }
                         Err(e) => set_error.set(Some(e)),
                     }
                 }
@@ -226,7 +231,6 @@ pub fn ScriptEditor() -> impl IntoView {
             let args = js_sys::Array::new();
             args.push(&"script-console-line".into());
 
-            // listen() returns a Promise - must await it
             let promise: js_sys::Promise = match js_sys::Reflect::apply(&listen_fn.into(), &event, &args) {
                 Ok(p) => match p.dyn_into::<js_sys::Promise>() {
                     Ok(p) => p,
@@ -235,29 +239,20 @@ pub fn ScriptEditor() -> impl IntoView {
                 Err(_) => return,
             };
 
-            // Await the promise to get the unlisten function
-            let unlisten: JsValue = match JsFuture::from(promise).await {
+            let _unlisten: JsValue = match JsFuture::from(promise).await {
                 Ok(v) => v,
                 Err(_) => return,
             };
-            web_sys::console::log_1(&format!("[JS] listener registered").into());
 
             let cb = wasm_bindgen::closure::Closure::wrap(Box::new(move |line: JsValue| {
-                web_sys::console::log_1(&format!("[JS] event received").into());
                 if let Ok(cl) = serde_wasm_bindgen::from_value::<ConsoleLine>(line) {
-                    web_sys::console::log_1(&format!("[JS] parsed: [{}] {}", cl.level, cl.message).into());
                     set_console_lines.update(|lines| {
                         lines.push(cl);
                     });
-                } else {
-                    web_sys::console::log_1(&"[JS] failed to parse".into());
                 }
             }) as Box<dyn FnMut(JsValue)>);
-
-            // Keep callback alive
             cb.forget();
 
-            // Test message to verify console is working
             set_console_lines.update(|lines| {
                 lines.push(ConsoleLine {
                     level: "info".into(),
@@ -277,14 +272,23 @@ pub fn ScriptEditor() -> impl IntoView {
             set_running.set(true);
             set_console_lines.set(Vec::new());
 
+            let content = editor_content.get();
             spawn_local({
                 let set_running = set_running.clone();
                 let set_error = set_error.clone();
                 let set_console_lines = set_console_lines.clone();
+                let is_bundled = script.origin == "bundled";
                 async move {
+                    // Only save if not a bundled script (bundled scripts are read-only)
+                    if !is_bundled {
+                        if let Err(e) = save_script(script.id.clone(), content).await {
+                            set_error.set(Some(e));
+                            set_running.set(false);
+                            return;
+                        }
+                    }
                     match run_script(script.id.clone()).await {
                         Ok(result) => {
-                            // Use console_lines from result (events not working in Tauri 2)
                             set_console_lines.set(result.console_lines);
                             set_running.set(false);
                         }
@@ -300,15 +304,15 @@ pub fn ScriptEditor() -> impl IntoView {
 
     let handle_save = {
         let set_error = set_error.clone();
+        let editor_content = editor_content.clone();
         move |_| {
             let Some(script) = selected_script.get() else { return };
             let content = editor_content.get();
-
             spawn_local({
                 let set_error = set_error.clone();
                 async move {
                     match save_script(script.id.clone(), content).await {
-                        Ok(()) => { /* saved */ }
+                        Ok(()) => {}
                         Err(e) => set_error.set(Some(e)),
                     }
                 }
@@ -322,6 +326,9 @@ pub fn ScriptEditor() -> impl IntoView {
         let set_editor_content = set_editor_content.clone();
         let set_console_lines = set_console_lines.clone();
         let set_error = set_error.clone();
+        let codemirror_editor = codemirror_editor.clone();
+        let editor_ready = editor_ready.clone();
+        let set_pending_content = set_pending_content.clone();
         move |id: String| {
             let scripts_snapshot = scripts.get();
             if let Some(script) = scripts_snapshot.iter().find(|s| s.id == id).cloned() {
@@ -330,7 +337,22 @@ pub fn ScriptEditor() -> impl IntoView {
                 let script_id = script.id.clone();
                 spawn_local(async move {
                     match read_script(script_id).await {
-                        Ok(source) => set_editor_content.set(source),
+                        Ok(source) => {
+                            set_editor_content.set(source.clone());
+                            // Update CodeMirror with new script content
+                            if editor_ready.get() {
+                                if let Some(editor) = codemirror_editor.get() {
+                                    if let Ok(set_value) = js_sys::Reflect::get(&editor, &"setValue".into()) {
+                                        let args = js_sys::Array::new();
+                                        args.push(&source.into());
+                                        let _ = js_sys::Reflect::apply(&set_value.into(), &editor, &args);
+                                    }
+                                }
+                            } else {
+                                // Editor not ready yet, store as pending
+                                set_pending_content.set(Some(source));
+                            }
+                        }
                         Err(e) => set_error.set(Some(e)),
                     }
                 });
@@ -361,6 +383,93 @@ pub fn ScriptEditor() -> impl IntoView {
             set_editor_height.set(new_height);
         }
     };
+
+    // Initialize CodeMirror when DOM is ready
+    let init_editor = move || {
+        let set_editor_content = set_editor_content.clone();
+        let set_codemirror_editor = set_codemirror_editor.clone();
+        let pending_content = pending_content.clone();
+
+        spawn_local(async move {
+            // Wait for pending content to be set (first script loaded)
+            // Poll until we have content (max 50 attempts with 100ms delay)
+            let mut initial_content = String::new();
+            for _ in 0..50 {
+                if let Some(content) = pending_content.get() {
+                    initial_content = content;
+                    break;
+                }
+                // Yield to event loop to let other tasks run
+                gloo_timers::future::TimeoutFuture::new(100).await;
+            }
+
+            let document = match web_sys::window().and_then(|w| w.document()) {
+                Some(d) => d,
+                None => return,
+            };
+            let container = match document.get_element_by_id("script-codemirror") {
+                Some(e) => e,
+                None => return,
+            };
+
+            let window = match web_sys::window() {
+                Some(w) => w,
+                None => return,
+            };
+            let codemirror = match js_sys::Reflect::get(&window, &"CodeMirror".into()) {
+                Ok(cm) => cm,
+                Err(_) => return,
+            };
+
+            let options = js_sys::Object::new();
+            let _ = js_sys::Reflect::set(&options, &"value".into(), &initial_content.clone().into());
+            let _ = js_sys::Reflect::set(&options, &"mode".into(), &"rust".into());
+            let _ = js_sys::Reflect::set(&options, &"theme".into(), &"dracula".into());
+            let _ = js_sys::Reflect::set(&options, &"lineNumbers".into(), &true.into());
+            let _ = js_sys::Reflect::set(&options, &"tabSize".into(), &2.into());
+            let _ = js_sys::Reflect::set(&options, &"indentWithTabs".into(), &false.into());
+            let _ = js_sys::Reflect::set(&options, &"lineWrapping".into(), &true.into());
+            let _ = js_sys::Reflect::set(&options, &"styleActiveLine".into(), &true.into());
+
+            let args = js_sys::Array::new();
+            args.push(&container.into());
+            args.push(&options);
+
+            let editor = match js_sys::Reflect::apply(&codemirror.into(), &wasm_bindgen::JsValue::UNDEFINED, &args) {
+                Ok(e) => match e.dyn_into::<js_sys::Object>() {
+                    Ok(obj) => obj,
+                    Err(_) => return,
+                },
+                Err(_) => return,
+            };
+
+            // Store the editor instance for later access
+            set_codemirror_editor.set(Some(editor.clone().into()));
+            set_editor_ready.set(true);
+
+            // Set up change listener
+            if let Ok(on_fn) = js_sys::Reflect::get(&editor, &"on".into()) {
+                let set_editor_content = set_editor_content.clone();
+                let editor_clone = editor.clone();
+                let callback = wasm_bindgen::closure::Closure::wrap(Box::new(move |_cm: JsValue, _change_obj: JsValue| {
+                    if let Ok(get_value) = js_sys::Reflect::get(&editor_clone, &"getValue".into()) {
+                        if let Ok(value) = js_sys::Reflect::apply(&get_value.into(), &editor_clone, &js_sys::Array::new()) {
+                            if let Some(s) = value.as_string() {
+                                set_editor_content.set(s);
+                            }
+                        }
+                    }
+                }) as Box<dyn FnMut(JsValue, JsValue)>);
+                let on_args = js_sys::Array::new();
+                on_args.push(&"change".into());
+                on_args.push(&callback.as_js_value());
+                let _ = js_sys::Reflect::apply(&on_fn.into(), &editor, &on_args);
+                callback.forget();
+            }
+        });
+    };
+
+    init_editor();
 
     view! {
         <div
@@ -403,19 +512,15 @@ pub fn ScriptEditor() -> impl IntoView {
                                 </select>
                             </div>
 
-                            {/* Code editor textarea (CodeMirror integration point) */}
+                            {/* Code editor container for CodeMirror */}
                             <div
                                 class="script-editor-area"
                                 style:height={move || format!("{}px", editor_height.get())}
                             >
-                                <textarea
-                                    class="code-textarea"
-                                    rows="12"
-                                    on:input={move |ev| {
-                                        set_editor_content.set(event_target_value(&ev));
-                                    }}
-                                    placeholder="// Select or create a script..."
-                                >{editor_content.get()}</textarea>
+                                <div
+                                    id="script-codemirror"
+                                    class="codemirror-container"
+                                ></div>
                             </div>
 
                             {/* Horizontal resizer */}

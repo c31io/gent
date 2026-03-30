@@ -419,13 +419,17 @@ html, body, #app {
 /* Scrollbar styling */
 .panel-content::-webkit-scrollbar,
 .canvas-container::-webkit-scrollbar,
-.code-textarea::-webkit-scrollbar {
+.code-textarea::-webkit-scrollbar,
+.codemirror-container .CodeMirror .CodeMirror-vscrollbar::-webkit-scrollbar,
+.codemirror-container .CodeMirror .CodeMirror-hscrollbar::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 .panel-content::-webkit-scrollbar-track,
-.canvas-container::-webkit-scrollbar-track {
+.canvas-container::-webkit-scrollbar-track,
+.codemirror-container .CodeMirror .CodeMirror-vscrollbar::-webkit-scrollbar-track,
+.codemirror-container .CodeMirror .CodeMirror-hscrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
 
@@ -435,14 +439,18 @@ html, body, #app {
 
 .panel-content::-webkit-scrollbar-thumb,
 .canvas-container::-webkit-scrollbar-thumb,
-.code-textarea::-webkit-scrollbar-thumb {
+.code-textarea::-webkit-scrollbar-thumb,
+.codemirror-container .CodeMirror .CodeMirror-vscrollbar::-webkit-scrollbar-thumb,
+.codemirror-container .CodeMirror .CodeMirror-hscrollbar::-webkit-scrollbar-thumb {
   background: var(--border-color);
   border-radius: 4px;
 }
 
 .panel-content::-webkit-scrollbar-thumb:hover,
 .canvas-container::-webkit-scrollbar-thumb:hover,
-.code-textarea::-webkit-scrollbar-thumb:hover {
+.code-textarea::-webkit-scrollbar-thumb:hover,
+.codemirror-container .CodeMirror .CodeMirror-vscrollbar::-webkit-scrollbar-thumb:hover,
+.codemirror-container .CodeMirror .CodeMirror-hscrollbar::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
 }
 
@@ -934,6 +942,29 @@ html, body, #app {
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
+}
+
+.codemirror-container {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    border-radius: 4px;
+    border: 1px solid var(--border-color, #333);
+}
+
+.codemirror-container .CodeMirror {
+    height: 100%;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 13px;
+}
+
+.codemirror-container .CodeMirror-gutters {
+    background: var(--bg-input, #1a1a1a);
+    border-right: 1px solid var(--border-color, #333);
+}
+
+.codemirror-container .CodeMirror-linenumber {
+    color: var(--text-secondary, #888);
 }
 
 .script-editor-area .code-textarea {
