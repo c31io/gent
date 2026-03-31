@@ -108,3 +108,29 @@ pub fn call_plugin(
     let output = plugin.process(input).map_err(|e| e.to_string())?;
     Ok(output.0)
 }
+
+/// Load a plugin from a file path (for development/testing)
+#[tauri::command]
+pub fn load_plugin_from_path(
+    state: State<'_, Arc<PluginState>>,
+    path: String,
+    capabilities: Vec<String>,
+) -> Result<PluginInfo, String> {
+    let wasm_bytes = std::fs::read(&path)
+        .map_err(|e| format!("failed to read plugin file: {}", e))?;
+
+    let requested_caps: Vec<_> = capabilities
+        .iter()
+        .filter_map(|s| crate::plugins::Capability::from_str(s))
+        .collect();
+
+    let plugin = state
+        .loader
+        .load_plugin(&wasm_bytes, &requested_caps)
+        .map_err(|e| e.to_string())?;
+
+    let manifest = plugin.manifest().clone();
+    let id = state.registry.register(plugin.into()).map_err(|e| e.to_string())?;
+
+    Ok(PluginInfo { id, manifest })
+}
