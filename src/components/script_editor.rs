@@ -34,7 +34,6 @@ impl Default for ConsoleLevel {
 pub struct ConsoleLine {
     pub level: ConsoleLevel,
     pub message: String,
-    pub run_id: String,
 }
 
 /// Run result from run_script
@@ -191,7 +190,6 @@ pub fn ScriptEditor() -> impl IntoView {
                 lines.push(ConsoleLine {
                     level: ConsoleLevel::Info,
                     message: "Console ready".into(),
-                    run_id: "init".into(),
                 });
             });
         }
