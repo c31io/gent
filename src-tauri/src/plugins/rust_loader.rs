@@ -165,9 +165,9 @@ impl Plugin for RustWasmPlugin {
         start.call(&mut store, ())
             .map_err(|e| PluginError::Runtime(format!("plugin execution failed: {}", e)))?;
 
-        // Collect console lines from the plugin execution
+        // Collect console lines from the plugin execution (intentionally unused - deferred integration)
         let mut console_lines = self.console_lines.lock().unwrap();
-        let captured_lines: Vec<ConsoleLine> = console_lines.drain(..).collect();
+        let _captured_lines: Vec<ConsoleLine> = console_lines.drain(..).collect();
         drop(console_lines);
 
         parse_output(captured)

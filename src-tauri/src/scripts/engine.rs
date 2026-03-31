@@ -3,7 +3,6 @@ use crate::plugins::errors::PluginError;
 use rune::diagnostics::Diagnostic;
 use rune::termcolor::{ColorChoice, StandardStream};
 use rune::{Context, Diagnostics, Module, Source, Sources, Vm};
-use serde::Serialize;
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::sync::OnceLock;

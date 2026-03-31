@@ -181,20 +181,11 @@ pub async fn run_script(
     // Run synchronously in a blocking task to avoid blocking the async runtime
     let input_clone = input.clone();
     let lines: Vec<ConsoleLine> = tokio::task::spawn_blocking(move || {
-        let result = engine.run(&source, input_clone);
-        eprintln!("[DEBUG] engine.run returned {} lines, ok={}", result.as_ref().map(|l| l.len()).unwrap_or(0), result.is_ok());
-        if let Ok(lines) = &result {
-            for line in lines {
-                eprintln!("[DEBUG]   line: [{}] {}", line.level, line.message);
-            }
-        }
-        result
+        engine.run(&source, input_clone)
     })
     .await
     .map_err(|e| format!("task join error: {}", e))?
     .map_err(|e: PluginError| e.to_string())?;
-
-    eprintln!("[DEBUG] run_script emitting {} lines", lines.len());
 
     // Emit each line as a Tauri event for real-time streaming
     // Use window.emit() instead of app.emit() for window-scoped events
@@ -202,8 +193,6 @@ pub async fn run_script(
         for line in &lines {
             let _ = window.emit("script-console-line", line.clone());
         }
-    } else {
-        eprintln!("[DEBUG] could not get main window");
     }
 
     Ok(RunResult {
