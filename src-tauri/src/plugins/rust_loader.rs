@@ -1,6 +1,8 @@
 use crate::plugins::capabilities::Capability;
+use crate::plugins::console::ConsoleLine;
 use crate::plugins::errors::PluginError;
 use crate::plugins::plugin::{Input, Manifest, Output, Plugin};
+use std::sync::{Arc, Mutex};
 use wasmtime::{Engine, Linker, Module, Store};
 use wasmtime_wasi::WasiCtxBuilder;
 use wasmtime_wasi::pipe::MemoryOutputPipe;
@@ -99,6 +101,7 @@ impl super::WasmLoader for RustWasmLoader {
             module,
             manifest: Manifest::default(),
             capabilities: capabilities.to_vec(),
+            console_lines: Arc::new(Mutex::new(Vec::new())),
         };
 
         Ok(Box::new(plugin))
@@ -111,6 +114,7 @@ struct RustWasmPlugin {
     module: Module,
     manifest: Manifest,
     capabilities: Vec<Capability>,
+    console_lines: Arc<Mutex<Vec<ConsoleLine>>>,
 }
 
 impl Plugin for RustWasmPlugin {
@@ -132,6 +136,20 @@ impl Plugin for RustWasmPlugin {
         wasmtime_wasi::preview1::add_to_linker_sync(&mut linker, |cx| cx)
             .map_err(|e| PluginError::Runtime(format!("failed to set up WASI: {}", e)))?;
 
+        // Set up log::println host import for console capture
+        let console_lines = self.console_lines.clone();
+        linker.func_wrap("log", "println", move |mut caller: wasmtime::Caller<'_, WasiP1Ctx>, ptr: i32, len: i32| {
+            use wasmtime::Extern;
+            if let Some(Extern::Memory(memory)) = caller.get_export("memory") {
+                let mut buffer = vec![0u8; len as usize];
+                if memory.read(&mut caller, ptr as usize, &mut buffer).is_ok() {
+                    if let Ok(msg) = String::from_utf8(buffer) {
+                        console_lines.lock().unwrap().push(ConsoleLine::output(msg));
+                    }
+                }
+            }
+        }).map_err(|e| PluginError::Runtime(format!("failed to register log::println: {}", e)))?;
+
         // Instantiate - WASI imports are auto-linked via the linker
         let instance = linker
             .instantiate(&mut store, &self.module)
@@ -146,6 +164,11 @@ impl Plugin for RustWasmPlugin {
         // Call the entry point - proc_exit(0) succeeds, proc_exit(N) traps with error
         start.call(&mut store, ())
             .map_err(|e| PluginError::Runtime(format!("plugin execution failed: {}", e)))?;
+
+        // Collect console lines from the plugin execution
+        let mut console_lines = self.console_lines.lock().unwrap();
+        let captured_lines: Vec<ConsoleLine> = console_lines.drain(..).collect();
+        drop(console_lines);
 
         parse_output(captured)
     }
