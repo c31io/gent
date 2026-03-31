@@ -1,3 +1,4 @@
+use crate::plugins::console::ConsoleLine;
 use crate::plugins::errors::PluginError;
 use rune::diagnostics::Diagnostic;
 use rune::termcolor::{ColorChoice, StandardStream};
@@ -6,14 +7,6 @@ use serde::Serialize;
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::sync::OnceLock;
-
-/// Unique run ID for correlating console output
-#[derive(Debug, Clone, Serialize, serde::Deserialize)]
-pub struct ConsoleLine {
-    pub level: String,
-    pub message: String,
-    pub run_id: String,
-}
 
 /// Log output buffer populated by log::println in Rune, drained after execution
 thread_local! {
@@ -63,7 +56,6 @@ impl RuneEngine {
         &self,
         source: &str,
         input: serde_json::Value,
-        run_id: &str,
     ) -> Result<Vec<ConsoleLine>, PluginError> {
         let mut sources = Sources::new();
         let _ = sources.insert(
@@ -87,7 +79,6 @@ impl RuneEngine {
                 lines.push(ConsoleLine {
                     level: "error".into(),
                     message: format!("diagnostic emit failed: {}", e),
-                    run_id: run_id.into(),
                 });
             }
             for diag in diagnostics.diagnostics() {
@@ -96,14 +87,12 @@ impl RuneEngine {
                         lines.push(ConsoleLine {
                             level: "error".into(),
                             message: f.to_string(),
-                            run_id: run_id.into(),
                         });
                     }
                     Diagnostic::Warning(w) => {
                         lines.push(ConsoleLine {
                             level: "warning".into(),
                             message: w.to_string(),
-                            run_id: run_id.into(),
                         });
                     }
                     _ => {}
@@ -134,7 +123,6 @@ impl RuneEngine {
                         lines.push(ConsoleLine {
                             level: "output".into(),
                             message: msg,
-                            run_id: run_id.into(),
                         });
                     }
                 });
@@ -143,7 +131,6 @@ impl RuneEngine {
                 lines.push(ConsoleLine {
                     level: "error".into(),
                     message: format!("runtime error: {}", e),
-                    run_id: run_id.into(),
                 });
             }
         }

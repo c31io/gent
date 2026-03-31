@@ -1,5 +1,6 @@
+use crate::plugins::console::ConsoleLine;
 use crate::plugins::errors::PluginError;
-use crate::scripts::engine::{ConsoleLine, RUNE_ENGINE};
+use crate::scripts::engine::RUNE_ENGINE;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -178,10 +179,9 @@ pub async fn run_script(
     let engine = RUNE_ENGINE.get().ok_or_else(|| String::from("Rune engine not initialized"))?;
 
     // Run synchronously in a blocking task to avoid blocking the async runtime
-    let run_id_clone = run_id.clone();
     let input_clone = input.clone();
     let lines: Vec<ConsoleLine> = tokio::task::spawn_blocking(move || {
-        let result = engine.run(&source, input_clone, &run_id_clone);
+        let result = engine.run(&source, input_clone);
         eprintln!("[DEBUG] engine.run returned {} lines, ok={}", result.as_ref().map(|l| l.len()).unwrap_or(0), result.is_ok());
         if let Ok(lines) = &result {
             for line in lines {
