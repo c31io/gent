@@ -25,7 +25,7 @@ pub struct PluginInfo {
 pub fn load_plugin(
     state: State<'_, Arc<PluginState>>,
     request: LoadPluginRequest,
-) -> Result<PluginInfo, String> {
+) -> Result<PluginInfo, crate::plugins::PluginError> {
     // Parse requested capabilities
     let requested_caps: Vec<_> = request
         .capabilities
@@ -34,35 +34,39 @@ pub fn load_plugin(
         .collect();
 
     // Validate: all requested capabilities must be Gent-supported
-    let supported_caps = &[crate::plugins::Capability::Context,
-                           crate::plugins::Capability::Tools,
-                           crate::plugins::Capability::Memory,
-                           crate::plugins::Capability::Nodes,
-                           crate::plugins::Capability::Execution];
+    let supported_caps = &[
+        crate::plugins::Capability::Context,
+        crate::plugins::Capability::Tools,
+        crate::plugins::Capability::Memory,
+        crate::plugins::Capability::Nodes,
+        crate::plugins::Capability::Execution,
+    ];
     for cap in &requested_caps {
         if !supported_caps.contains(cap) {
-            return Err(format!("unsupported capability: {:?}", cap));
+            return Err(crate::plugins::PluginError::UnsupportedCapability(format!(
+                "{:?}",
+                cap
+            )));
         }
     }
 
     let plugin = state
         .loader
-        .load_plugin(&request.wasm_bytes, &requested_caps, None)
-        .map_err(|e| e.to_string())?;
+        .load_plugin(&request.wasm_bytes, &requested_caps, "wasm")?;
 
     // Validate: plugin manifest capabilities must be subset of granted capabilities
     let manifest = plugin.manifest();
     for cap in &manifest.capabilities {
         if !requested_caps.contains(cap) {
-            return Err(format!(
+            return Err(crate::plugins::PluginError::CapabilityDenied(format!(
                 "plugin {} requires {:?} capability but it was not granted",
                 manifest.name, cap
-            ));
+            )));
         }
     }
 
     let manifest = plugin.manifest().clone();
-    let id = state.registry.register(plugin.into()).map_err(|e| e.to_string())?;
+    let id = state.registry.register(plugin.into())?;
 
     Ok(PluginInfo { id, manifest })
 }
@@ -85,11 +89,11 @@ pub fn list_plugins(state: State<'_, Arc<PluginState>>) -> Vec<PluginInfo> {
 
 /// Unload a plugin
 #[tauri::command]
-pub fn unload_plugin(state: State<'_, Arc<PluginState>>, plugin_id: String) -> Result<(), String> {
-    state
-        .registry
-        .unregister(&plugin_id)
-        .map_err(|e| e.to_string())
+pub fn unload_plugin(
+    state: State<'_, Arc<PluginState>>,
+    plugin_id: String,
+) -> Result<(), crate::plugins::PluginError> {
+    state.registry.unregister(&plugin_id)
 }
 
 /// Call a plugin's process function
@@ -98,14 +102,14 @@ pub fn call_plugin(
     state: State<'_, Arc<PluginState>>,
     plugin_id: String,
     input: serde_json::Value,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, crate::plugins::PluginError> {
     let plugin = state
         .registry
         .get(&plugin_id)
-        .ok_or_else(|| format!("plugin not found: {}", plugin_id))?;
+        .ok_or_else(|| crate::plugins::PluginError::NotFound(plugin_id.clone()))?;
 
     let input = crate::plugins::Input(input);
-    let output = plugin.process(input).map_err(|e| e.to_string())?;
+    let output = plugin.process(input)?;
     Ok(output.0)
 }
 
@@ -115,14 +119,16 @@ pub fn load_plugin_from_path(
     state: State<'_, Arc<PluginState>>,
     path: String,
     capabilities: Vec<String>,
-) -> Result<PluginInfo, String> {
-    let wasm_bytes = std::fs::read(&path)
-        .map_err(|e| format!("failed to read plugin file: {}", e))?;
+) -> Result<PluginInfo, crate::plugins::PluginError> {
+    let wasm_bytes = std::fs::read(&path)?;
 
     // Extract extension from path
+    let e = PluginError::ExtensionNotFound("in load_plugin_from_path".to_string());
     let extension = std::path::Path::new(&path)
         .extension()
-        .and_then(|e| e.to_str());
+        .ok_or(e.clone())?
+        .to_str()
+        .ok_or(e)?;
 
     let requested_caps: Vec<_> = capabilities
         .iter()
@@ -139,28 +145,30 @@ pub fn load_plugin_from_path(
     ];
     for cap in &requested_caps {
         if !supported_caps.contains(cap) {
-            return Err(format!("unsupported capability: {:?}", cap));
+            return Err(crate::plugins::PluginError::UnsupportedCapability(format!(
+                "{:?}",
+                cap
+            )));
         }
     }
 
     let plugin = state
         .loader
-        .load_plugin(&wasm_bytes, &requested_caps, extension)
-        .map_err(|e| e.to_string())?;
+        .load_plugin(&wasm_bytes, &requested_caps, extension)?;
 
     // Validate plugin manifest capabilities are subset of granted capabilities
     let manifest = plugin.manifest();
     for cap in &manifest.capabilities {
         if !requested_caps.contains(cap) {
-            return Err(format!(
+            return Err(crate::plugins::PluginError::CapabilityDenied(format!(
                 "plugin {} requires {:?} capability but it was not granted",
                 manifest.name, cap
-            ));
+            )));
         }
     }
 
     let manifest = plugin.manifest().clone();
-    let id = state.registry.register(plugin.into()).map_err(|e| e.to_string())?;
+    let id = state.registry.register(plugin.into())?;
 
     Ok(PluginInfo { id, manifest })
 }

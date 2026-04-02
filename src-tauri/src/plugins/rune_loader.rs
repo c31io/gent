@@ -68,8 +68,8 @@ impl Default for RunePluginLoader {
 }
 
 impl super::PluginSource for RunePluginLoader {
-    fn can_load(&self, extension: Option<&str>) -> bool {
-        extension == Some("rn")
+    fn can_load(&self, extension: &str) -> bool {
+        extension == "rn"
     }
 
     fn load(

@@ -77,8 +77,8 @@ impl Default for WasmPluginLoader {
 }
 
 impl super::PluginSource for WasmPluginLoader {
-    fn can_load(&self, extension: Option<&str>) -> bool {
-        extension == Some("wasm")
+    fn can_load(&self, extension: &str) -> bool {
+        extension == "wasm"
     }
 
     fn load(

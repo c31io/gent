@@ -1,6 +1,8 @@
+use serde::Serialize;
+use std::io;
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Clone, Error, Debug, Serialize)]
 pub enum PluginError {
     #[error("unsupported capability: {0}")]
     UnsupportedCapability(String),
@@ -17,6 +19,9 @@ pub enum PluginError {
     #[error("invalid output: {0}")]
     InvalidOutput(String),
 
+    #[error("extension no found: {0}")]
+    ExtensionNotFound(String),
+
     #[error("initialization failed: {0}")]
     InitFailed(String),
 
@@ -25,4 +30,10 @@ pub enum PluginError {
 
     #[error("capability denied: {0}")]
     CapabilityDenied(String),
+}
+
+impl From<io::Error> for PluginError {
+    fn from(e: io::Error) -> Self {
+        PluginError::Loader(format!("I/O error: {}", e))
+    }
 }

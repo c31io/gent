@@ -20,7 +20,7 @@ impl PluginLoader {
     }
 
     /// Check if any loader can handle this plugin source
-    pub fn can_load(&self, extension: Option<&str>) -> bool {
+    pub fn can_load(&self, extension: &str) -> bool {
         self.loaders.iter().any(|l| l.can_load(extension))
     }
 
@@ -29,7 +29,7 @@ impl PluginLoader {
         &self,
         source: &[u8],
         capabilities: &[Capability],
-        extension: Option<&str>,
+        extension: &str,
     ) -> Result<Box<dyn Plugin>, PluginError> {
         for loader in &self.loaders {
             if loader.can_load(extension) {
