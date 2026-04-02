@@ -1,4 +1,5 @@
 use leptos::prelude::*;
+use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::spawn_local;
 use gloo_timers::future::TimeoutFuture;
 use std::collections::HashMap;
@@ -31,23 +32,33 @@ async fn call_llm_complete(
     use crate::tauri_invoke;
     let opts = js_sys::Object::new();
     let config = js_sys::Object::new();
-    js_sys::Reflect::set(&opts, &"config".into(), &config.into())
-        .map_err(|e| e.to_string())?;
-    js_sys::Reflect::set(&config, &"format".into(), &format.into())
-        .map_err(|e| e.to_string())?;
-    js_sys::Reflect::set(&config, &"model_size".into(), &model_size.into())
-        .map_err(|e| e.to_string())?;
-    js_sys::Reflect::set(&config, &"api_key".into(), &api_key.into())
-        .map_err(|e| e.to_string())?;
-    js_sys::Reflect::set(&config, &"custom_url".into(), &custom_url.into())
-        .map_err(|e| e.to_string())?;
+    let config_js: JsValue = config.into();
+    if !js_sys::Reflect::set(&opts, &"config".into(), &config_js).unwrap_or(false) {
+        return Err("Failed to set config".to_string());
+    }
+    if !js_sys::Reflect::set(&config_js, &"format".into(), &format.into()).unwrap_or(false) {
+        return Err("Failed to set format".to_string());
+    }
+    if !js_sys::Reflect::set(&config_js, &"model_size".into(), &model_size.into()).unwrap_or(false) {
+        return Err("Failed to set model_size".to_string());
+    }
+    if !js_sys::Reflect::set(&config_js, &"api_key".into(), &api_key.into()).unwrap_or(false) {
+        return Err("Failed to set api_key".to_string());
+    }
+    if !js_sys::Reflect::set(&config_js, &"custom_url".into(), &custom_url.into()).unwrap_or(false) {
+        return Err("Failed to set custom_url".to_string());
+    }
     let input = js_sys::Object::new();
-    js_sys::Reflect::set(&opts, &"input".into(), &input.into())
-        .map_err(|e| e.to_string())?;
-    js_sys::Reflect::set(&input, &"prompt".into(), &prompt.into())
-        .map_err(|e| e.to_string())?;
-    js_sys::Reflect::set(&input, &"temperature".into(), &JsValue::from_f64(temperature))
-        .map_err(|e| e.to_string())?;
+    let input_js: JsValue = input.into();
+    if !js_sys::Reflect::set(&opts, &"input".into(), &input_js).unwrap_or(false) {
+        return Err("Failed to set input".to_string());
+    }
+    if !js_sys::Reflect::set(&input_js, &"prompt".into(), &prompt.into()).unwrap_or(false) {
+        return Err("Failed to set prompt".to_string());
+    }
+    if !js_sys::Reflect::set(&input_js, &"temperature".into(), &JsValue::from_f64(temperature)).unwrap_or(false) {
+        return Err("Failed to set temperature".to_string());
+    }
     let js_value = tauri_invoke::invoke("llm_complete".into(), &opts).await?;
     serde_wasm_bindgen::from_value(js_value)
         .map_err(|e| format!("deserialization failed: {:?}", e))
@@ -237,7 +248,7 @@ pub fn AppLayout() -> impl IntoView {
                     // Set waiting_on if we have upstream dependencies
                     let waiting_on = upstream.keys().next().copied();
 
-                    let mut task = crate::components::execution_engine::Task::new(exec_node_id, &node.node_type, parent_id);
+                    let mut task = crate::components::execution_engine::Task::new(exec_node_id, &node.node_type, parent_id.clone());
                     task.waiting_on = waiting_on;
                     task.status = crate::components::execution_engine::TaskStatus::Running;
                     task.started_at = Some(crate::components::execution_engine::Timestamp::now());
@@ -334,7 +345,7 @@ pub fn AppLayout() -> impl IntoView {
                             exec.tasks.push(llm_task);
 
                             // Spawn the async call — it will update execution_state when done
-                            let exec_state_clone = execution_state;
+                            let exec_state_setter = set_execution_state;
                             spawn_local(async move {
                                 let result = call_llm_complete(
                                     config.format.clone(),
@@ -357,7 +368,7 @@ pub fn AppLayout() -> impl IntoView {
                                         } else {
                                             format!("LLM error: {}", output.error)
                                         };
-                                        exec_state_clone.update(|exec| {
+                                        exec_state_setter.update(|exec| {
                                             if let Some(task) = exec.tasks.iter_mut().find(|t| t.node_id == exec_node_id) {
                                                 task.status = status;
                                                 task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
@@ -370,7 +381,7 @@ pub fn AppLayout() -> impl IntoView {
                                         });
                                     }
                                     Err(e) => {
-                                        exec_state_clone.update(|exec| {
+                                        exec_state_setter.update(|exec| {
                                             if let Some(task) = exec.tasks.iter_mut().find(|t| t.node_id == exec_node_id) {
                                                 task.status = crate::components::execution_engine::TaskStatus::Error;
                                                 task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
