@@ -27,12 +27,12 @@ impl CapturedOutput {
     }
 }
 
-/// Loader for Rust-compiled WASM plugins (wasm32-wasip2 target)
-pub struct RustWasmLoader {
+/// Loader for WASM plugins using wasmtime
+pub struct WasmPluginLoader {
     engine: Engine,
 }
 
-impl RustWasmLoader {
+impl WasmPluginLoader {
     pub fn new() -> Result<Self, PluginError> {
         let engine = Engine::default();
         Ok(Self { engine })
@@ -70,13 +70,13 @@ fn parse_output(captured: CapturedOutput) -> Result<Output, PluginError> {
         .map_err(|e| PluginError::Runtime(format!("invalid JSON from plugin: {}", e)))
 }
 
-impl Default for RustWasmLoader {
+impl Default for WasmPluginLoader {
     fn default() -> Self {
-        Self::new().expect("failed to create RustWasmLoader")
+        Self::new().expect("failed to create WasmPluginLoader")
     }
 }
 
-impl super::WasmLoader for RustWasmLoader {
+impl super::WasmLoader for WasmPluginLoader {
     fn can_load(&self, wasm: &[u8]) -> bool {
         Self::is_wasm(wasm)
     }
@@ -88,7 +88,7 @@ impl super::WasmLoader for RustWasmLoader {
     ) -> Result<Box<dyn Plugin>, PluginError> {
         if !self.can_load(wasm) {
             return Err(PluginError::Loader(
-                "not a valid Rust WASM module".into(),
+                "not a valid WASM module".into(),
             ));
         }
 
@@ -96,7 +96,7 @@ impl super::WasmLoader for RustWasmLoader {
             .map_err(|e| PluginError::Loader(e.to_string()))?;
 
         // Create a minimal plugin wrapper
-        let plugin = RustWasmPlugin {
+        let plugin = WasmPluginInstance {
             engine: self.engine.clone(),
             module,
             manifest: Manifest::default(),
@@ -108,8 +108,8 @@ impl super::WasmLoader for RustWasmLoader {
     }
 }
 
-/// Inner plugin instance for Rust WASM
-struct RustWasmPlugin {
+/// Inner plugin instance for WASM plugins
+struct WasmPluginInstance {
     engine: Engine,
     module: Module,
     manifest: Manifest,
@@ -117,7 +117,7 @@ struct RustWasmPlugin {
     console_lines: Arc<Mutex<Vec<ConsoleLine>>>,
 }
 
-impl Plugin for RustWasmPlugin {
+impl Plugin for WasmPluginInstance {
     fn manifest(&self) -> &Manifest {
         &self.manifest
     }

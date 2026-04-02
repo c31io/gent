@@ -1,10 +1,10 @@
 use crate::plugins::capabilities::Capability;
 use crate::plugins::errors::PluginError;
 use crate::plugins::plugin::Plugin;
-use crate::plugins::{RustWasmLoader, WasmLoader};
+use crate::plugins::{WasmPluginLoader, WasmLoader};
 use std::sync::Arc;
 
-/// Registry of WASM loaders for general plugin loading (Rust WASM only)
+/// Registry of WASM loaders for general plugin loading
 pub struct PluginLoader {
     loaders: Vec<Arc<dyn WasmLoader>>,
 }
@@ -12,7 +12,7 @@ pub struct PluginLoader {
 impl PluginLoader {
     pub fn new() -> Self {
         let loaders = vec![
-            Arc::new(RustWasmLoader::new().unwrap()) as Arc<dyn WasmLoader>,
+            Arc::new(WasmPluginLoader::new().unwrap()) as Arc<dyn WasmLoader>,
         ];
         Self { loaders }
     }
