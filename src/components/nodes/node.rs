@@ -144,6 +144,50 @@ fn render_variant_body(variant: &NodeVariant, node_id: u32, on_text_change: &Opt
                 rows="2"
             >{schema.clone()}</textarea>
         }.into_any(),
+        NodeVariant::LLM { config } => view! {
+            <div class="node-variant-fields">
+                <div class="node-variant-field">
+                    <label>"Format"</label>
+                    <select class="node-variant-select">
+                        <option value="openai" selected={config.format == "openai"}>"OpenAI"</option>
+                        <option value="anthropic" selected={config.format == "anthropic"}>"Anthropic"</option>
+                        <option value="openai-compatible" selected={config.format == "openai-compatible"}>"OpenAI Compatible"</option>
+                    </select>
+                </div>
+                <div class="node-variant-field">
+                    <label>"Size"</label>
+                    <select class="node-variant-select">
+                        <option value="S" selected={config.model_size == "S"}>"S"</option>
+                        <option value="M" selected={config.model_size == "M"}>"M"</option>
+                        <option value="L" selected={config.model_size == "L"}>"L"</option>
+                    </select>
+                </div>
+                <div class="node-variant-field">
+                    <label>"API Key"</label>
+                    <input
+                        type="password"
+                        class="node-variant-input"
+                        value={config.api_key.clone()}
+                        placeholder="key or leave empty for env"
+                    />
+                </div>
+                {if config.format == "openai-compatible" {
+                    view! {
+                        <div class="node-variant-field">
+                            <label>"Custom URL"</label>
+                            <input
+                                type="text"
+                                class="node-variant-input"
+                                value={config.custom_url.clone()}
+                                placeholder="http://localhost:11434/v1"
+                            />
+                        </div>
+                    }.into_any()
+                } else {
+                    view! { <></> }.into_any()
+                }}
+            </div>
+        }.into_any(),
         // Trigger variant is handled separately in the GraphNode view
         _ => view! { <div /> }.into_any(),
     }
