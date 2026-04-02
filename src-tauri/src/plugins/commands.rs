@@ -124,10 +124,35 @@ pub fn load_plugin_from_path(
         .filter_map(|s| crate::plugins::Capability::from_str(s))
         .collect();
 
+    // Validate all requested capabilities are Gent-supported
+    let supported_caps = &[
+        crate::plugins::Capability::Context,
+        crate::plugins::Capability::Tools,
+        crate::plugins::Capability::Memory,
+        crate::plugins::Capability::Nodes,
+        crate::plugins::Capability::Execution,
+    ];
+    for cap in &requested_caps {
+        if !supported_caps.contains(cap) {
+            return Err(format!("unsupported capability: {:?}", cap));
+        }
+    }
+
     let plugin = state
         .loader
         .load_plugin(&wasm_bytes, &requested_caps)
         .map_err(|e| e.to_string())?;
+
+    // Validate plugin manifest capabilities are subset of granted capabilities
+    let manifest = plugin.manifest();
+    for cap in &manifest.capabilities {
+        if !requested_caps.contains(cap) {
+            return Err(format!(
+                "plugin {} requires {:?} capability but it was not granted",
+                manifest.name, cap
+            ));
+        }
+    }
 
     let manifest = plugin.manifest().clone();
     let id = state.registry.register(plugin.into()).map_err(|e| e.to_string())?;
