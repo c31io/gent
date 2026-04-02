@@ -1,40 +1,43 @@
 use crate::plugins::capabilities::Capability;
 use crate::plugins::errors::PluginError;
 use crate::plugins::plugin::Plugin;
-use crate::plugins::{WasmPluginLoader, WasmLoader};
+use crate::plugins::{WasmPluginLoader, PluginSource};
+use crate::plugins::rune_loader::RunePluginLoader;
 use std::sync::Arc;
 
-/// Registry of WASM loaders for general plugin loading
+/// Registry of plugin source loaders for general plugin loading
 pub struct PluginLoader {
-    loaders: Vec<Arc<dyn WasmLoader>>,
+    loaders: Vec<Arc<dyn PluginSource>>,
 }
 
 impl PluginLoader {
     pub fn new() -> Self {
         let loaders = vec![
-            Arc::new(WasmPluginLoader::new().unwrap()) as Arc<dyn WasmLoader>,
+            Arc::new(WasmPluginLoader::new().unwrap()) as Arc<dyn PluginSource>,
+            Arc::new(RunePluginLoader::new()) as Arc<dyn PluginSource>,
         ];
         Self { loaders }
     }
 
-    /// Check if any loader can handle this WASM binary
-    pub fn can_load(&self, wasm: &[u8]) -> bool {
-        self.loaders.iter().any(|l| l.can_load(wasm))
+    /// Check if any loader can handle this plugin source
+    pub fn can_load(&self, extension: Option<&str>) -> bool {
+        self.loaders.iter().any(|l| l.can_load(extension))
     }
 
     /// Load a plugin using the appropriate loader
     pub fn load_plugin(
         &self,
-        wasm: &[u8],
+        source: &[u8],
         capabilities: &[Capability],
+        extension: Option<&str>,
     ) -> Result<Box<dyn Plugin>, PluginError> {
         for loader in &self.loaders {
-            if loader.can_load(wasm) {
-                return loader.load(wasm, capabilities);
+            if loader.can_load(extension) {
+                return loader.load(source, capabilities);
             }
         }
         Err(PluginError::Loader(
-            "no loader found for this WASM binary".into(),
+            "no loader found for this plugin source".into(),
         ))
     }
 }

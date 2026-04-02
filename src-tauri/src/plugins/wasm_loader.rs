@@ -76,9 +76,9 @@ impl Default for WasmPluginLoader {
     }
 }
 
-impl super::WasmLoader for WasmPluginLoader {
-    fn can_load(&self, wasm: &[u8]) -> bool {
-        Self::is_wasm(wasm)
+impl super::PluginSource for WasmPluginLoader {
+    fn can_load(&self, extension: Option<&str>) -> bool {
+        extension == Some("wasm")
     }
 
     fn load(
@@ -86,12 +86,6 @@ impl super::WasmLoader for WasmPluginLoader {
         wasm: &[u8],
         capabilities: &[Capability],
     ) -> Result<Box<dyn Plugin>, PluginError> {
-        if !self.can_load(wasm) {
-            return Err(PluginError::Loader(
-                "not a valid WASM module".into(),
-            ));
-        }
-
         let module = Module::from_binary(&self.engine, wasm)
             .map_err(|e| PluginError::Loader(e.to_string()))?;
 

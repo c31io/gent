@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod integration_tests {
     use crate::plugins::{
-        Capability, PluginLoader, PluginRegistry, WasmLoader, WasmPluginLoader,
+        Capability, PluginLoader, PluginRegistry, PluginSource,
     };
 
     #[test]
@@ -17,7 +17,7 @@ mod integration_tests {
 
         // Placeholder loaders accept any WASM with magic number
         // but process() returns error since actual invocation not implemented
-        let result = loader.load_plugin(&wasm, &[Capability::Context]);
+        let result = loader.load_plugin(&wasm, &[Capability::Context], None);
         assert!(result.is_ok()); // Loader accepts it (placeholder behavior)
 
         // The loaded plugin's process() should fail (not implemented)

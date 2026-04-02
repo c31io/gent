@@ -20,7 +20,7 @@ pub struct PluginInfo {
     pub manifest: Manifest,
 }
 
-/// Load a plugin from WASM bytes
+/// Load a plugin from plugin source bytes (WASM or Rune script)
 #[tauri::command]
 pub fn load_plugin(
     state: State<'_, Arc<PluginState>>,
@@ -47,7 +47,7 @@ pub fn load_plugin(
 
     let plugin = state
         .loader
-        .load_plugin(&request.wasm_bytes, &requested_caps)
+        .load_plugin(&request.wasm_bytes, &requested_caps, None)
         .map_err(|e| e.to_string())?;
 
     // Validate: plugin manifest capabilities must be subset of granted capabilities
@@ -119,6 +119,11 @@ pub fn load_plugin_from_path(
     let wasm_bytes = std::fs::read(&path)
         .map_err(|e| format!("failed to read plugin file: {}", e))?;
 
+    // Extract extension from path
+    let extension = std::path::Path::new(&path)
+        .extension()
+        .and_then(|e| e.to_str());
+
     let requested_caps: Vec<_> = capabilities
         .iter()
         .filter_map(|s| crate::plugins::Capability::from_str(s))
@@ -140,7 +145,7 @@ pub fn load_plugin_from_path(
 
     let plugin = state
         .loader
-        .load_plugin(&wasm_bytes, &requested_caps)
+        .load_plugin(&wasm_bytes, &requested_caps, extension)
         .map_err(|e| e.to_string())?;
 
     // Validate plugin manifest capabilities are subset of granted capabilities

@@ -7,6 +7,7 @@ pub mod wasm_loader;
 pub mod loader;
 pub mod console;
 pub mod commands;
+pub mod rune_loader;
 
 #[cfg(test)] mod integration_test;
 
@@ -18,9 +19,10 @@ pub use host::PluginHost;
 pub use registry::PluginRegistry;
 pub use wasm_loader::WasmPluginLoader;
 pub use loader::PluginLoader;
+pub use rune_loader::RunePluginLoader;
 
-/// WASM loader trait - implemented by WasmPluginLoader
-pub trait WasmLoader: Send + Sync {
-    fn can_load(&self, wasm: &[u8]) -> bool;
-    fn load(&self, wasm: &[u8], capabilities: &[Capability]) -> Result<Box<dyn Plugin>, PluginError>;
+/// Plugin source loader trait - implemented by WasmPluginLoader and RunePluginLoader
+pub trait PluginSource: Send + Sync {
+    fn can_load(&self, extension: Option<&str>) -> bool;
+    fn load(&self, source: &[u8], capabilities: &[Capability]) -> Result<Box<dyn Plugin>, PluginError>;
 }
