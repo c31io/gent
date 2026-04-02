@@ -3,12 +3,55 @@ use wasm_bindgen_futures::spawn_local;
 use gloo_timers::future::TimeoutFuture;
 use std::collections::HashMap;
 
-use crate::components::canvas::state::{ConnectionState, NodeState, NodeStatus, default_ports_for_type, default_variant_for_type};
+use crate::components::canvas::state::{ConnectionState, NodeState, NodeStatus, LlmConfig, default_ports_for_type, default_variant_for_type};
 use crate::components::canvas::Canvas;
 use crate::components::execution_engine::ExecutionState;
 use crate::components::left_panel::{LeftPanel, NODE_TYPES};
 use crate::components::right_panel::RightPanel;
 use crate::components::node_inspector::NodeInspector;
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct LlmOutput {
+    pub text: String,
+    pub tokens_used: u32,
+    pub model: String,
+    pub finish_reason: String,
+    pub error: String,
+}
+
+/// Call Tauri backend for LLM completion
+async fn call_llm_complete(
+    format: String,
+    model_size: String,
+    api_key: String,
+    custom_url: String,
+    prompt: String,
+    temperature: f64,
+) -> Result<LlmOutput, String> {
+    use crate::tauri_invoke;
+    let opts = js_sys::Object::new();
+    let config = js_sys::Object::new();
+    js_sys::Reflect::set(&opts, &"config".into(), &config.into())
+        .map_err(|e| e.to_string())?;
+    js_sys::Reflect::set(&config, &"format".into(), &format.into())
+        .map_err(|e| e.to_string())?;
+    js_sys::Reflect::set(&config, &"model_size".into(), &model_size.into())
+        .map_err(|e| e.to_string())?;
+    js_sys::Reflect::set(&config, &"api_key".into(), &api_key.into())
+        .map_err(|e| e.to_string())?;
+    js_sys::Reflect::set(&config, &"custom_url".into(), &custom_url.into())
+        .map_err(|e| e.to_string())?;
+    let input = js_sys::Object::new();
+    js_sys::Reflect::set(&opts, &"input".into(), &input.into())
+        .map_err(|e| e.to_string())?;
+    js_sys::Reflect::set(&input, &"prompt".into(), &prompt.into())
+        .map_err(|e| e.to_string())?;
+    js_sys::Reflect::set(&input, &"temperature".into(), &JsValue::from_f64(temperature))
+        .map_err(|e| e.to_string())?;
+    let js_value = tauri_invoke::invoke("llm_complete".into(), &opts).await?;
+    serde_wasm_bindgen::from_value(js_value)
+        .map_err(|e| format!("deserialization failed: {:?}", e))
+}
 
 /// Main application layout with left panel, canvas, and right panel
 #[component]
@@ -250,6 +293,99 @@ pub fn AppLayout() -> impl IntoView {
                                 task.add_message("Audio Input (no path)", crate::components::execution_engine::TraceLevel::Warn);
                                 String::new()
                             }
+                        }
+                        "llm" => {
+                            // Extract config from variant
+                            let config = if let crate::components::canvas::state::NodeVariant::LLM { config } = &node.variant {
+                                config.clone()
+                            } else {
+                                crate::components::canvas::state::LlmConfig {
+                                    format: "openai".into(),
+                                    model_size: "M".into(),
+                                    api_key: String::new(),
+                                    custom_url: String::new(),
+                                }
+                            };
+
+                            // Get prompt from upstream: look for the connection whose target is this node's "prompt" port.
+                            // upstream is HashMap<u32, String> keyed by source node_id -> result.
+                            // We need to find which upstream node is connected to our "prompt" input.
+                            let prompt_text = upstream
+                                .values()
+                                .next()
+                                .cloned()
+                                .unwrap_or_default();
+
+                            // Temperature: read from upstream values (currently all values are strings)
+                            // For MVP, temperature is always 1.0. A future task will read from the
+                            // temperature input port specifically.
+                            let temperature = 1.0;
+
+                            // Push a "waiting" task for this node
+                            let mut llm_task = crate::components::execution_engine::Task::new(
+                                exec_node_id, "llm", parent_id.clone(),
+                            );
+                            llm_task.status = crate::components::execution_engine::TaskStatus::Waiting;
+                            llm_task.waiting_on = Some(exec_node_id);
+                            llm_task.add_message(
+                                &format!("LLM call: {} / {} / prompt_len={}", config.format, config.model_size, prompt_text.len()),
+                                crate::components::execution_engine::TraceLevel::Info,
+                            );
+                            exec.tasks.push(llm_task);
+
+                            // Spawn the async call — it will update execution_state when done
+                            let exec_state_clone = execution_state;
+                            spawn_local(async move {
+                                let result = call_llm_complete(
+                                    config.format.clone(),
+                                    config.model_size.clone(),
+                                    config.api_key.clone(),
+                                    config.custom_url.clone(),
+                                    prompt_text.clone(),
+                                    temperature,
+                                ).await;
+
+                                match result {
+                                    Ok(output) => {
+                                        let status = if output.error.is_empty() {
+                                            crate::components::execution_engine::TaskStatus::Complete
+                                        } else {
+                                            crate::components::execution_engine::TaskStatus::Error
+                                        };
+                                        let trace_msg = if output.error.is_empty() {
+                                            format!("LLM result: {} ({} tokens)", output.text, output.tokens_used)
+                                        } else {
+                                            format!("LLM error: {}", output.error)
+                                        };
+                                        exec_state_clone.update(|exec| {
+                                            if let Some(task) = exec.tasks.iter_mut().find(|t| t.node_id == exec_node_id) {
+                                                task.status = status;
+                                                task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
+                                                task.result = Some(output.text.clone());
+                                                task.add_message(
+                                                    &trace_msg,
+                                                    crate::components::execution_engine::TraceLevel::Info,
+                                                );
+                                            }
+                                        });
+                                    }
+                                    Err(e) => {
+                                        exec_state_clone.update(|exec| {
+                                            if let Some(task) = exec.tasks.iter_mut().find(|t| t.node_id == exec_node_id) {
+                                                task.status = crate::components::execution_engine::TaskStatus::Error;
+                                                task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
+                                                task.add_message(
+                                                    &format!("LLM call failed: {}", e),
+                                                    crate::components::execution_engine::TraceLevel::Error,
+                                                );
+                                            }
+                                        });
+                                    }
+                                }
+                            });
+
+                            // Return placeholder — actual result is async
+                            String::new()
                         }
                         _ => {
                             task.add_message(&format!("{} executed", node.label), crate::components::execution_engine::TraceLevel::Info);
