@@ -85,6 +85,12 @@ pub const NODE_TYPES: &[NodeType] = &[
         category: "Agent",
         description: "Executes tasks",
     },
+    NodeType {
+        id: "llm",
+        name: "LLM",
+        category: "Agent",
+        description: "Call an LLM API (OpenAI, Anthropic, Ollama)",
+    },
     // Tool
     NodeType {
         id: "web_search",
