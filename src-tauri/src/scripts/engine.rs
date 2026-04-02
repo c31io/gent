@@ -7,8 +7,8 @@ use std::cell::RefCell;
 use std::sync::Arc;
 use std::sync::OnceLock;
 
-/// Log output buffer populated by log::println in Rune, drained after execution
 thread_local! {
+    /// Log output buffer populated by log::println in Rune, drained after execution
     static LOG_OUTPUT: RefCell<Vec<String>> = RefCell::new(Vec::new());
 }
 
