@@ -49,7 +49,7 @@ fn resolve_api_key(config: &LlmConfig) -> Result<String, String> {
         "anthropic" => "ANTHROPIC_API_KEY",
         _ => return Err("unknown format".to_string()),
     };
-    env::var(env_key).map_err(|_| format!("missing env var {}", env_key))
+    env::var(env_key).map_err(|_| "missing API key".to_string())
 }
 
 // OpenAI response shapes
@@ -168,7 +168,7 @@ pub async fn llm_complete(config: LlmConfig, input: LlmInput) -> LlmOutput {
                             tokens_used: 0,
                             model: model.to_string(),
                             finish_reason: String::new(),
-                            error: format!("parse error: {}", e),
+                            error: "failed to parse response".to_string(),
                         },
                     }
                 }
@@ -235,7 +235,7 @@ pub async fn llm_complete(config: LlmConfig, input: LlmInput) -> LlmOutput {
                             tokens_used: 0,
                             model: model.to_string(),
                             finish_reason: String::new(),
-                            error: format!("parse error: {}", e),
+                            error: "failed to parse response".to_string(),
                         },
                     }
                 }

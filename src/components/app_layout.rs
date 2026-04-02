@@ -255,6 +255,7 @@ pub fn AppLayout() -> impl IntoView {
                     task.add_message(&format!("{} [node_id={}, parent_id={:?}]", node.label, task.node_id, task.parent_id), crate::components::execution_engine::TraceLevel::Info);
 
                     // Execute node with upstream results
+                    let mut skip_post_push = false;
                     let result = match node.node_type.as_str() {
                         "user_input" => {
                             if let crate::components::canvas::state::NodeVariant::UserInput { text } = &node.variant {
@@ -396,6 +397,7 @@ pub fn AppLayout() -> impl IntoView {
                             });
 
                             // Return placeholder — actual result is async
+                            skip_post_push = true;
                             String::new()
                         }
                         _ => {
@@ -404,12 +406,14 @@ pub fn AppLayout() -> impl IntoView {
                         }
                     };
 
-                    task.result = Some(result.clone());
-                    node_results.insert(exec_node_id, result.clone());
+                    if !skip_post_push {
+                        task.result = Some(result.clone());
+                        node_results.insert(exec_node_id, result.clone());
 
-                    task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
-                    task.status = crate::components::execution_engine::TaskStatus::Complete;
-                    exec.tasks.push(task);
+                        task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
+                        task.status = crate::components::execution_engine::TaskStatus::Complete;
+                        exec.tasks.push(task);
+                    }
                 }
             }
         }
