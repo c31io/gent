@@ -34,7 +34,6 @@ impl Default for ConsoleLevel {
 pub struct ConsoleLine {
     pub level: ConsoleLevel,
     pub message: String,
-    pub run_id: String,
 }
 
 /// Run result from run_script
@@ -191,7 +190,6 @@ pub fn ScriptEditor() -> impl IntoView {
                 lines.push(ConsoleLine {
                     level: ConsoleLevel::Info,
                     message: "Console ready".into(),
-                    run_id: "init".into(),
                 });
             });
         }
@@ -319,11 +317,20 @@ pub fn ScriptEditor() -> impl IntoView {
     };
 
     // Initialize CodeMirror when DOM is ready.
-    // Content is already loaded by the time this runs (set in mount spawn_local).
-    // Use request_animation_frame to defer DOM init until after the view paints.
-    let initial_content = pending_content.get_untracked().unwrap_or_default();
+    // Use request_animation_frame to defer DOM init until after the view paints,
+    // then poll for pending_content since it loads asynchronously after mount.
     request_animation_frame(move || {
         spawn_local(async move {
+            // Poll until we have content (loaded by mount spawn_local)
+            let mut initial_content = String::new();
+            for _ in 0..50 {
+                if let Some(content) = pending_content.get() {
+                    initial_content = content;
+                    break;
+                }
+                gloo_timers::future::TimeoutFuture::new(100).await;
+            }
+
             let document = match web_sys::window().and_then(|w| w.document()) {
                 Some(d) => d,
                 None => return,

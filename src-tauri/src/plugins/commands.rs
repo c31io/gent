@@ -108,3 +108,54 @@ pub fn call_plugin(
     let output = plugin.process(input).map_err(|e| e.to_string())?;
     Ok(output.0)
 }
+
+/// Load a plugin from a file path (for development/testing)
+#[tauri::command]
+pub fn load_plugin_from_path(
+    state: State<'_, Arc<PluginState>>,
+    path: String,
+    capabilities: Vec<String>,
+) -> Result<PluginInfo, String> {
+    let wasm_bytes = std::fs::read(&path)
+        .map_err(|e| format!("failed to read plugin file: {}", e))?;
+
+    let requested_caps: Vec<_> = capabilities
+        .iter()
+        .filter_map(|s| crate::plugins::Capability::from_str(s))
+        .collect();
+
+    // Validate all requested capabilities are Gent-supported
+    let supported_caps = &[
+        crate::plugins::Capability::Context,
+        crate::plugins::Capability::Tools,
+        crate::plugins::Capability::Memory,
+        crate::plugins::Capability::Nodes,
+        crate::plugins::Capability::Execution,
+    ];
+    for cap in &requested_caps {
+        if !supported_caps.contains(cap) {
+            return Err(format!("unsupported capability: {:?}", cap));
+        }
+    }
+
+    let plugin = state
+        .loader
+        .load_plugin(&wasm_bytes, &requested_caps)
+        .map_err(|e| e.to_string())?;
+
+    // Validate plugin manifest capabilities are subset of granted capabilities
+    let manifest = plugin.manifest();
+    for cap in &manifest.capabilities {
+        if !requested_caps.contains(cap) {
+            return Err(format!(
+                "plugin {} requires {:?} capability but it was not granted",
+                manifest.name, cap
+            ));
+        }
+    }
+
+    let manifest = plugin.manifest().clone();
+    let id = state.registry.register(plugin.into()).map_err(|e| e.to_string())?;
+
+    Ok(PluginInfo { id, manifest })
+}

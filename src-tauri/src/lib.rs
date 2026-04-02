@@ -2,7 +2,7 @@ use std::process::Command;
 use std::sync::Arc;
 use crate::plugins::{PluginLoader, PluginRegistry};
 use crate::plugins::commands::{
-    call_plugin, list_plugins, load_plugin, unload_plugin, PluginState
+    call_plugin, list_plugins, load_plugin, load_plugin_from_path, unload_plugin, PluginState
 };
 use crate::scripts::commands::{list_scripts, read_script, save_script, run_script};
 
@@ -60,6 +60,7 @@ pub fn run() {
             show_main_window,
             execute_code,
             load_plugin,
+            load_plugin_from_path,
             list_plugins,
             unload_plugin,
             call_plugin,
