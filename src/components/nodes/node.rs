@@ -144,29 +144,30 @@ fn render_variant_body(variant: &NodeVariant, node_id: u32, on_text_change: &Opt
                 rows="2"
             >{schema.clone()}</textarea>
         }.into_any(),
-        NodeVariant::LLM { config } => view! {
+        NodeVariant::ModelConfig { format, model_name, api_key, custom_url } => view! {
             <div class="node-variant-fields">
                 <div class="node-variant-field">
                     <label>"Format"</label>
                     <select class="node-variant-select">
-                        <option value="openai" selected={config.format == "openai"}>"OpenAI"</option>
-                        <option value="anthropic" selected={config.format == "anthropic"}>"Anthropic"</option>
+                        <option value="openai" selected={format == "openai"}>"OpenAI"</option>
+                        <option value="anthropic" selected={format == "anthropic"}>"Anthropic"</option>
                     </select>
                 </div>
                 <div class="node-variant-field">
-                    <label>"Size"</label>
-                    <select class="node-variant-select">
-                        <option value="S" selected={config.model_name == "S"}>"S"</option>
-                        <option value="M" selected={config.model_name == "M"}>"M"</option>
-                        <option value="L" selected={config.model_name == "L"}>"L"</option>
-                    </select>
+                    <label>"Model Name"</label>
+                    <input
+                        type="text"
+                        class="node-variant-input"
+                        value={model_name.clone()}
+                        placeholder="gpt-4o-mini"
+                    />
                 </div>
                 <div class="node-variant-field">
                     <label>"API Key"</label>
                     <input
                         type="password"
                         class="node-variant-input"
-                        value={config.api_key.clone()}
+                        value={api_key.clone()}
                         placeholder="key or leave empty for env"
                     />
                 </div>
@@ -175,9 +176,16 @@ fn render_variant_body(variant: &NodeVariant, node_id: u32, on_text_change: &Opt
                     <input
                         type="text"
                         class="node-variant-input"
-                        value={config.custom_url.clone()}
+                        value={custom_url.clone()}
                         placeholder="http://localhost:11434/v1"
                     />
+                </div>
+            </div>
+        }.into_any(),
+        NodeVariant::Model => view! {
+            <div class="node-variant-fields">
+                <div class="node-variant-field">
+                    <span class="node-variant-static">"Config via port connection"</span>
                 </div>
             </div>
         }.into_any(),
