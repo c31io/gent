@@ -86,10 +86,16 @@ pub const NODE_TYPES: &[NodeType] = &[
         description: "Executes tasks",
     },
     NodeType {
-        id: "llm",
-        name: "LLM",
+        id: "model",
+        name: "Model",
         category: "Agent",
-        description: "Call an LLM API (OpenAI, Anthropic, Ollama)",
+        description: "Call an LLM API with config from Model Config node",
+    },
+    NodeType {
+        id: "model_config",
+        name: "Model Config",
+        category: "Agent",
+        description: "Holds API configuration for Model node",
     },
     // Tool
     NodeType {
