@@ -298,3 +298,23 @@ pub fn default_variant_for_type(node_type: &str) -> NodeVariant {
         _ => NodeVariant::Trigger,
     }
 }
+
+/// A saved selection of nodes and connections for reuse
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct SavedSelection {
+    pub id: String,           // UUID
+    pub name: String,         // User-provided name
+    pub created_at: f64,      // js_sys::Date::now() timestamp
+    pub nodes: Vec<NodeState>, // Full node data
+    pub connections: Vec<ConnectionState>,
+}
+
+/// Bundled pre-made group template
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct BundledGroup {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub description: &'static str,
+    pub nodes: Vec<NodeState>,
+    pub connections: Vec<ConnectionState>,
+}
