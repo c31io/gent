@@ -308,8 +308,13 @@ pub fn AppLayout() -> impl IntoView {
                         }
                         "llm" => {
                             // Extract config from variant
-                            let config = if let crate::components::canvas::state::NodeVariant::LLM { config } = &node.variant {
-                                config.clone()
+                            let config = if let crate::components::canvas::state::NodeVariant::ModelConfig { format, model_name, api_key, custom_url } = &node.variant {
+                                crate::components::canvas::state::ModelConfig {
+                                    format: format.clone(),
+                                    model_name: model_name.clone(),
+                                    api_key: api_key.clone(),
+                                    custom_url: custom_url.clone(),
+                                }
                             } else {
                                 crate::components::canvas::state::ModelConfig {
                                     format: "openai".into(),

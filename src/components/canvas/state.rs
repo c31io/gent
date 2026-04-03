@@ -57,7 +57,6 @@ pub enum NodeVariant {
     Loop { iterations: u32 },
     ChatOutput { response: String },
     JsonOutput { schema: String },
-    LLM { config: ModelConfig },
     ModelConfig {
         format: String,       // "openai" | "anthropic"
         model_name: String,  // e.g., "gpt-4o-mini", "claude-3-5-sonnet-latest"

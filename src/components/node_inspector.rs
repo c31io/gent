@@ -173,26 +173,6 @@ pub fn InspectorProperties(
                 <textarea class="property-textarea code" rows="4">{schema.clone()}</textarea>
             </div>
         }.into_any(),
-        NodeVariant::LLM { config } => view! {
-            <div class="property-groups">
-                <div class="property-group">
-                    <label class="property-label">"Format"</label>
-                    <input type="text" class="property-input" value={config.format.clone()} />
-                </div>
-                <div class="property-group">
-                    <label class="property-label">"Model Size"</label>
-                    <input type="text" class="property-input" value={config.model_name.clone()} />
-                </div>
-                <div class="property-group">
-                    <label class="property-label">"API Key"</label>
-                    <input type="password" class="property-input" value={config.api_key.clone()} />
-                </div>
-                <div class="property-group">
-                    <label class="property-label">"Custom URL"</label>
-                    <input type="text" class="property-input" value={config.custom_url.clone()} />
-                </div>
-            </div>
-        }.into_any(),
         NodeVariant::ModelConfig { format, model_name, api_key, custom_url } => view! {
             <div class="property-groups">
                 <div class="property-group">
