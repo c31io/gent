@@ -23,7 +23,7 @@ pub struct LlmOutput {
 /// Call Tauri backend for LLM completion
 async fn call_llm_complete(
     format: String,
-    model_size: String,
+    model_name: String,
     api_key: String,
     custom_url: String,
     prompt: String,
@@ -39,8 +39,8 @@ async fn call_llm_complete(
     if !js_sys::Reflect::set(&config_js, &"format".into(), &format.into()).unwrap_or(false) {
         return Err("Failed to set format".to_string());
     }
-    if !js_sys::Reflect::set(&config_js, &"model_size".into(), &model_size.into()).unwrap_or(false) {
-        return Err("Failed to set model_size".to_string());
+    if !js_sys::Reflect::set(&config_js, &"model_name".into(), &model_name.into()).unwrap_or(false) {
+        return Err("Failed to set model_name".to_string());
     }
     if !js_sys::Reflect::set(&config_js, &"api_key".into(), &api_key.into()).unwrap_or(false) {
         return Err("Failed to set api_key".to_string());
@@ -306,51 +306,59 @@ pub fn AppLayout() -> impl IntoView {
                                 String::new()
                             }
                         }
-                        "llm" => {
-                            // Extract config from variant
-                            let config = if let crate::components::canvas::state::NodeVariant::ModelConfig { format, model_name, api_key, custom_url } = &node.variant {
-                                crate::components::canvas::state::ModelConfig {
-                                    format: format.clone(),
-                                    model_name: model_name.clone(),
-                                    api_key: api_key.clone(),
-                                    custom_url: custom_url.clone(),
-                                }
-                            } else {
-                                crate::components::canvas::state::ModelConfig {
-                                    format: "openai".into(),
-                                    model_name: String::new(),
-                                    api_key: String::new(),
-                                    custom_url: String::new(),
-                                }
-                            };
-
-                            // Get prompt from upstream: look for the connection whose target is this node's "prompt" port.
-                            // upstream is HashMap<u32, String> keyed by source node_id -> result.
-                            // We need to find which upstream node is connected to our "prompt" input.
-                            let prompt_text = upstream
+                        "model" => {
+                            // Extract config from the upstream "config" port connection
+                            let config_json = upstream
                                 .values()
                                 .next()
                                 .cloned()
-                                .unwrap_or_default();
+                                .unwrap_or_else(|| {
+                                    r#"{"format":"openai","model_name":"","api_key":"","custom_url":""}"#.to_string()
+                                });
 
-                            // Temperature: read from upstream values (currently all values are strings)
-                            // For MVP, temperature is always 1.0. A future task will read from the
-                            // temperature input port specifically.
+                            // Simple JSON parsing since serde_json is not available in wasm
+                            fn get_json_str(json: &str, key: &str) -> String {
+                                let pattern = format!(r#""{}":"#, key);
+                                json.find(&pattern)
+                                    .map(|start| {
+                                        let value_start = start + pattern.len();
+                                        let rest = &json[value_start..];
+                                        if rest.starts_with('"') {
+                                            // Quoted string value
+                                            let end = rest[1..].find('"').map(|i| i + 1).unwrap_or(rest.len());
+                                            rest[1..end].to_string()
+                                        } else {
+                                            // Fallback for other values
+                                            rest.split(',').next().unwrap_or("").split('}').next().unwrap_or("").to_string()
+                                        }
+                                    })
+                                    .unwrap_or_default()
+                            }
+
+                            let config = crate::components::canvas::state::ModelConfig {
+                                format: get_json_str(&config_json, "format"),
+                                model_name: get_json_str(&config_json, "model_name"),
+                                api_key: get_json_str(&config_json, "api_key"),
+                                custom_url: get_json_str(&config_json, "custom_url"),
+                            };
+
+                            // prompt from upstream
+                            let prompt_text = upstream.values().next().cloned().unwrap_or_default();
                             let temperature = 1.0;
 
-                            // Push a "waiting" task for this node
-                            let mut llm_task = crate::components::execution_engine::Task::new(
-                                exec_node_id, "llm", parent_id.clone(),
+                            // Push a "waiting" task
+                            let mut model_task = crate::components::execution_engine::Task::new(
+                                exec_node_id, "model", parent_id.clone(),
                             );
-                            llm_task.status = crate::components::execution_engine::TaskStatus::Waiting;
-                            llm_task.waiting_on = Some(exec_node_id);
-                            llm_task.add_message(
-                                &format!("LLM call: {} / {} / prompt_len={}", config.format, config.model_name, prompt_text.len()),
+                            model_task.status = crate::components::execution_engine::TaskStatus::Waiting;
+                            model_task.waiting_on = Some(exec_node_id);
+                            model_task.add_message(
+                                &format!("Model call: {} / {} / prompt_len={}", config.format, config.model_name, prompt_text.len()),
                                 crate::components::execution_engine::TraceLevel::Info,
                             );
-                            exec.tasks.push(llm_task);
+                            exec.tasks.push(model_task);
 
-                            // Spawn the async call — it will update execution_state when done
+                            // Spawn async call
                             let exec_state_setter = set_execution_state;
                             spawn_local(async move {
                                 let result = call_llm_complete(
@@ -361,7 +369,6 @@ pub fn AppLayout() -> impl IntoView {
                                     prompt_text.clone(),
                                     temperature,
                                 ).await;
-
                                 match result {
                                     Ok(output) => {
                                         let status = if output.error.is_empty() {
@@ -392,7 +399,7 @@ pub fn AppLayout() -> impl IntoView {
                                                 task.status = crate::components::execution_engine::TaskStatus::Error;
                                                 task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
                                                 task.add_message(
-                                                    &format!("LLM call failed: {}", e),
+                                                    &format!("Model call failed: {}", e),
                                                     crate::components::execution_engine::TraceLevel::Error,
                                                 );
                                             }
@@ -401,9 +408,18 @@ pub fn AppLayout() -> impl IntoView {
                                 }
                             });
 
-                            // Return placeholder — actual result is async
                             skip_post_push = true;
                             String::new()
+                        }
+                        "model_config" => {
+                            let config_json = if let crate::components::canvas::state::NodeVariant::ModelConfig { format, model_name, api_key, custom_url } = &node.variant {
+                                format!(r#"{{"format":"{}","model_name":"{}","api_key":"{}","custom_url":"{}"}}"#, format, model_name, api_key, custom_url)
+                            } else {
+                                r#"{"format":"openai","model_name":"","api_key":"","custom_url":""}"#.to_string()
+                            };
+                            task.status = crate::components::execution_engine::TaskStatus::Complete;
+                            task.add_message("Model Config node", crate::components::execution_engine::TraceLevel::Info);
+                            config_json
                         }
                         _ => {
                             task.add_message(&format!("{} executed", node.label), crate::components::execution_engine::TraceLevel::Info);
