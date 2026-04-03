@@ -1,14 +1,22 @@
-use leptos::prelude::*;
 use std::collections::HashMap;
-use crate::components::canvas::state::{NodeState, ConnectionState, SavedSelection, BundledGroup};
+use crate::components::canvas::state::{NodeState, ConnectionState, SavedSelection};
 
 const STORAGE_KEY: &str = "gent_saved_selections";
 
 /// Load saved selections from localStorage
 pub fn load_saved_selections() -> Vec<SavedSelection> {
-    let window = web_sys::window()?;
-    let storage = window.local_storage().ok()?;
-    let stored = storage.get_item(STORAGE_KEY).ok()??;
+    let window = match web_sys::window() {
+        Some(w) => w,
+        None => return Vec::new(),
+    };
+    let storage = match window.local_storage() {
+        Ok(Some(s)) => s,
+        _ => return Vec::new(),
+    };
+    let stored = match storage.get_item(STORAGE_KEY) {
+        Ok(Some(s)) => s,
+        _ => return Vec::new(),
+    };
     serde_json::from_str(&stored).unwrap_or_default()
 }
 
@@ -96,20 +104,22 @@ pub async fn copy_to_clipboard(selection: SavedSelection, strip: bool) -> Result
     }
     let json = serde_json::to_string(&selection)
         .map_err(|e| format!("serialization failed: {}", e))?;
-    web_sys::window()
-        .and_then(|w| w.navigator().clipboard())
-        .ok_or("clipboard not available")?
-        .write_text(&json)
-        .map_err(|e| format!("clipboard write failed: {:?}", e))
+    let window = web_sys::window().ok_or("window not available")?;
+    let clipboard = window.navigator().clipboard();
+    let promise = clipboard.write_text(&json);
+    wasm_bindgen_futures::JsFuture::from(promise).await
+        .map_err(|e| format!("clipboard write failed: {:?}", e))?;
+    Ok(())
 }
 
 /// Read clipboard and parse as SavedSelection
 pub async fn paste_from_clipboard() -> Result<SavedSelection, String> {
-    let text = web_sys::window()
-        .and_then(|w| w.navigator().clipboard())
-        .ok_or("clipboard not available")?
-        .read_text()
+    let window = web_sys::window().ok_or("window not available")?;
+    let clipboard = window.navigator().clipboard();
+    let promise = clipboard.read_text();
+    let text = wasm_bindgen_futures::JsFuture::from(promise).await
         .map_err(|e| format!("clipboard read failed: {:?}", e))?;
-    serde_json::from_str(&text)
+    let text_str = text.as_string().ok_or("clipboard text was not a string")?;
+    serde_json::from_str(&text_str)
         .map_err(|e| format!("parse failed: {}", e))
 }

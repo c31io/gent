@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo check:*)",
+      "WebFetch(domain:127.0.0.1)",
+      "Bash(git checkout:*)",
+      "Bash(gh pr:*)",
+      "mcp__MiniMax__web_search",
+      "mcp__plugin_context7_context7__query-docs",
+      "WebFetch(domain:github.com)",
+      "Skill(commit-commands:commit)",
+      "Skill(commit-commands:commit:*)",
+      "Bash(git show:*)",
+      "Bash(gh api:*)",
+      "Bash(git add:*)",
+      "Bash(trunk build:*)",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "WebSearch",
+      "Read(//c/Users/c31io/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.5/skills/subagent-driven-development/**)",
+      "Read(//c/Users/c31io/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.5/skills/**)",
+      "Bash(git check-ignore:*)",
+      "Bash(git worktree:*)",
+      "Bash(cargo test:*)",
+      "Skill(code-review:code-review)",
+      "Skill(code-review:code-review:*)",
+      "Bash(cargo doc:*)",
+      "Skill(claude-md-management:revise-claude-md)",
+      "Skill(claude-md-management:revise-claude-md:*)",
+      "Bash(trunk serve:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Read(//c/Users/c31io/.cargo/**)",
+      "Bash(cargo tauri:*)",
+      "Bash(git commit:*)",
+      "Read(//c/Users/c31io/Documents/GitHub/gent/src/components/canvas/**)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\c31io\\Documents\\GitHub\\gent\\docs\\superpowers",
+      "C:\\Users\\c31io\\Documents\\GitHub\\gent\\src\\components\\canvas"
+    ]
+  }
+}

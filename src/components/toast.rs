@@ -24,24 +24,29 @@ pub fn ToastContainer(
 ) -> impl IntoView {
     view! {
         <div class="toast-container">
-            {move || toasts.get().iter().map(|toast| {
-                let class = match toast.toast_type {
-                    ToastType::Success => "toast toast-success",
-                    ToastType::Error => "toast toast-error",
-                    ToastType::Info => "toast toast-info",
-                };
-                view! {
-                    <div class={class}>
-                        <span>{toast.message.clone()}</span>
-                        <button
-                            class="toast-dismiss"
-                            on:click={move |_| on_dismiss.run(toast.id)}
-                        >
-                            "×"
-                        </button>
-                    </div>
-                }
-            }).collect::<Vec<_>>()}
+            {move || {
+                let toasts_vec = toasts.get();
+                toasts_vec.iter().map(|toast| {
+                    let class = match toast.toast_type {
+                        ToastType::Success => "toast toast-success",
+                        ToastType::Error => "toast toast-error",
+                        ToastType::Info => "toast toast-info",
+                    };
+                    let toast_id = toast.id;
+                    let message = toast.message.clone();
+                    view! {
+                        <div class={class}>
+                            <span>{message}</span>
+                            <button
+                                class="toast-dismiss"
+                                on:click={move |_| on_dismiss.run(toast_id)}
+                            >
+                                "×"
+                            </button>
+                        </div>
+                    }
+                }).collect::<Vec<_>>()
+            }}
         </div>
     }
 }

@@ -173,7 +173,9 @@ pub fn LeftPanel(
         <>
             <TabBar active_tab={active_tab.into()} set_active_tab={set_active_tab} />
             {move || match active_tab.get() {
-                Tab::Palette => view! { <NodePalette on_drag_start={on_drag_start} /> }.into_any(),
+                Tab::Palette => view! {
+                    <NodePalette on_drag_start={on_drag_start} />
+                }.into_any(),
                 Tab::Plugins => view! { <crate::components::plugin_manager::PluginManager /> }.into_any(),
             }}
         </>
