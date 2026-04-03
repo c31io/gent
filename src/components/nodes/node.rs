@@ -183,11 +183,7 @@ fn render_variant_body(variant: &NodeVariant, node_id: u32, on_text_change: &Opt
             </div>
         }.into_any(),
         NodeVariant::Model => view! {
-            <div class="node-variant-fields">
-                <div class="node-variant-field">
-                    <span class="node-variant-static">"Config via port connection"</span>
-                </div>
-            </div>
+            <div class="node-variant-fields" />
         }.into_any(),
         // Trigger variant is handled separately in the GraphNode view
         _ => view! { <div /> }.into_any(),
