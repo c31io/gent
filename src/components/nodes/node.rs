@@ -151,7 +151,6 @@ fn render_variant_body(variant: &NodeVariant, node_id: u32, on_text_change: &Opt
                     <select class="node-variant-select">
                         <option value="openai" selected={config.format == "openai"}>"OpenAI"</option>
                         <option value="anthropic" selected={config.format == "anthropic"}>"Anthropic"</option>
-                        <option value="openai-compatible" selected={config.format == "openai-compatible"}>"OpenAI Compatible"</option>
                     </select>
                 </div>
                 <div class="node-variant-field">

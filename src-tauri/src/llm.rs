@@ -4,10 +4,10 @@ use std::env;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmConfig {
-    pub format: String,       // "openai" | "anthropic" | "openai-compatible"
+    pub format: String,       // "openai" | "anthropic"
     pub model_size: String,   // "S" | "M" | "L"
     pub api_key: String,
-    pub custom_url: String,   // for openai-compatible
+    pub custom_url: String,   // custom endpoint base URL (optional, overrides default)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,9 +33,6 @@ fn get_model_for_size(format: &str, size: &str) -> &'static str {
         ("anthropic", "S") => "claude-3-5-haiku-20241022",
         ("anthropic", "M") => "claude-3-5-sonnet-latest",
         ("anthropic", "L") => "claude-3-5-opus-latest",
-        ("openai-compatible", "S") => "gpt-4o-mini",
-        ("openai-compatible", "M") => "gpt-4o",
-        ("openai-compatible", "L") => "gpt-4-turbo",
         _ => "gpt-4o",
     }
 }
@@ -45,7 +42,7 @@ fn resolve_api_key(config: &LlmConfig) -> Result<String, String> {
         return Ok(config.api_key.clone());
     }
     let env_key = match config.format.as_str() {
-        "openai" | "openai-compatible" => "OPENAI_API_KEY",
+        "openai" => "OPENAI_API_KEY",
         "anthropic" => "ANTHROPIC_API_KEY",
         _ => return Err("unknown format".to_string()),
     };
@@ -117,8 +114,8 @@ pub async fn llm_complete(config: LlmConfig, input: LlmInput) -> LlmOutput {
     let client = Client::new();
 
     match config.format.as_str() {
-        "openai" | "openai-compatible" => {
-            let url = if config.format == "openai-compatible" && !config.custom_url.is_empty() {
+        "openai" => {
+            let url = if !config.custom_url.is_empty() {
                 format!("{}/chat/completions", config.custom_url.trim_end_matches('/'))
             } else {
                 "https://api.openai.com/v1/chat/completions".to_string()

@@ -19,7 +19,7 @@ pub enum PortType {
 /// LLM node configuration
 #[derive(Clone, Debug)]
 pub struct LlmConfig {
-    pub format: String,       // "openai" | "anthropic" | "openai-compatible"
+    pub format: String,       // "openai" | "anthropic"
     pub model_size: String,   // "S" | "M" | "L"
     pub api_key: String,
     pub custom_url: String,
