@@ -17,7 +17,7 @@ pub enum PortType {
 }
 
 /// Model node configuration
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ModelConfig {
     pub format: String,       // "openai" | "anthropic"
     pub model_name: String,  // e.g., "gpt-4o-mini", "claude-3-5-sonnet-latest"
@@ -26,7 +26,7 @@ pub struct ModelConfig {
 }
 
 /// A port on a node with rendering offset calculated
-#[derive(Clone, Debug, Hash)]
+#[derive(Clone, Debug, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Port {
     pub name: String,
     pub port_type: PortType,
@@ -41,7 +41,7 @@ pub struct PortWithOffset {
 }
 
 /// Variants for different node types with their specific data
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum NodeVariant {
     UserInput { text: String },
     FileInput { path: String },
@@ -77,7 +77,7 @@ pub enum NodeStatus {
 }
 
 /// Minimal node state for rendering
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct NodeState {
     pub id: u32,
     pub x: f64,
@@ -91,7 +91,7 @@ pub struct NodeState {
 }
 
 /// Represents a persistent wire connection between two nodes
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ConnectionState {
     pub id: u32,
     pub source_node_id: u32,
