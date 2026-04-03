@@ -1,12 +1,12 @@
 /// Direction for a port
-#[derive(Clone, Debug, PartialEq, Hash)]
+#[derive(Clone, Debug, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum PortDirection {
     In,
     Out,
 }
 
 /// Type of data flowing through a port
-#[derive(Clone, Debug, PartialEq, Hash)]
+#[derive(Clone, Debug, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum PortType {
     Text,       // blue #3b82f6
     Image,      // green #22c55e
@@ -67,7 +67,7 @@ pub enum NodeVariant {
 }
 
 /// Execution status of a node
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum NodeStatus {
     Pending,
     Running,
