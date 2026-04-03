@@ -4,6 +4,7 @@ use leptos::prelude::*;
 enum Tab {
     Palette,
     Plugins,
+    Graph,
 }
 
 impl Default for Tab {
@@ -158,6 +159,12 @@ fn TabBar(active_tab: ReadSignal<Tab>, set_active_tab: WriteSignal<Tab>) -> impl
             >
                 "Plugins"
             </button>
+            <button
+                class=move || format!("tab{}", if active_tab.get() == Tab::Graph { " tab-active" } else { "" })
+                on:click={move |_| set_active_tab.set(Tab::Graph)}
+            >
+                "Graph"
+            </button>
         </div>
     }
 }
@@ -177,6 +184,11 @@ pub fn LeftPanel(
                     <NodePalette on_drag_start={on_drag_start} />
                 }.into_any(),
                 Tab::Plugins => view! { <crate::components::plugin_manager::PluginManager /> }.into_any(),
+                Tab::Graph => view! {
+                    <div class="panel-content">
+                        <div class="empty-message">"Graph templates coming soon"</div>
+                    </div>
+                }.into_any(),
             }}
         </>
     }
