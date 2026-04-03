@@ -1,4 +1,5 @@
 use leptos::prelude::*;
+use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::spawn_local;
 use gloo_timers::future::TimeoutFuture;
 use std::collections::HashMap;
@@ -9,6 +10,59 @@ use crate::components::execution_engine::ExecutionState;
 use crate::components::left_panel::{LeftPanel, NODE_TYPES};
 use crate::components::right_panel::RightPanel;
 use crate::components::node_inspector::NodeInspector;
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct LlmOutput {
+    pub text: String,
+    pub tokens_used: u32,
+    pub model: String,
+    pub finish_reason: String,
+    pub error: String,
+}
+
+/// Call Tauri backend for LLM completion
+async fn call_llm_complete(
+    format: String,
+    model_name: String,
+    api_key: String,
+    custom_url: String,
+    prompt: String,
+    temperature: f64,
+) -> Result<LlmOutput, String> {
+    use crate::tauri_invoke;
+    let opts = js_sys::Object::new();
+    let config = js_sys::Object::new();
+    let config_js: JsValue = config.into();
+    if !js_sys::Reflect::set(&opts, &"config".into(), &config_js).unwrap_or(false) {
+        return Err("Failed to set config".to_string());
+    }
+    if !js_sys::Reflect::set(&config_js, &"format".into(), &format.into()).unwrap_or(false) {
+        return Err("Failed to set format".to_string());
+    }
+    if !js_sys::Reflect::set(&config_js, &"model_name".into(), &model_name.into()).unwrap_or(false) {
+        return Err("Failed to set model_name".to_string());
+    }
+    if !js_sys::Reflect::set(&config_js, &"api_key".into(), &api_key.into()).unwrap_or(false) {
+        return Err("Failed to set api_key".to_string());
+    }
+    if !js_sys::Reflect::set(&config_js, &"custom_url".into(), &custom_url.into()).unwrap_or(false) {
+        return Err("Failed to set custom_url".to_string());
+    }
+    let input = js_sys::Object::new();
+    let input_js: JsValue = input.into();
+    if !js_sys::Reflect::set(&opts, &"input".into(), &input_js).unwrap_or(false) {
+        return Err("Failed to set input".to_string());
+    }
+    if !js_sys::Reflect::set(&input_js, &"prompt".into(), &prompt.into()).unwrap_or(false) {
+        return Err("Failed to set prompt".to_string());
+    }
+    if !js_sys::Reflect::set(&input_js, &"temperature".into(), &JsValue::from_f64(temperature)).unwrap_or(false) {
+        return Err("Failed to set temperature".to_string());
+    }
+    let js_value = tauri_invoke::invoke("llm_complete".into(), &opts).await?;
+    serde_wasm_bindgen::from_value(js_value)
+        .map_err(|e| format!("deserialization failed: {:?}", e))
+}
 
 /// Main application layout with left panel, canvas, and right panel
 #[component]
@@ -194,13 +248,14 @@ pub fn AppLayout() -> impl IntoView {
                     // Set waiting_on if we have upstream dependencies
                     let waiting_on = upstream.keys().next().copied();
 
-                    let mut task = crate::components::execution_engine::Task::new(exec_node_id, &node.node_type, parent_id);
+                    let mut task = crate::components::execution_engine::Task::new(exec_node_id, &node.node_type, parent_id.clone());
                     task.waiting_on = waiting_on;
                     task.status = crate::components::execution_engine::TaskStatus::Running;
                     task.started_at = Some(crate::components::execution_engine::Timestamp::now());
                     task.add_message(&format!("{} [node_id={}, parent_id={:?}]", node.label, task.node_id, task.parent_id), crate::components::execution_engine::TraceLevel::Info);
 
                     // Execute node with upstream results
+                    let mut skip_post_push = false;
                     let result = match node.node_type.as_str() {
                         "user_input" => {
                             if let crate::components::canvas::state::NodeVariant::UserInput { text } = &node.variant {
@@ -251,18 +306,135 @@ pub fn AppLayout() -> impl IntoView {
                                 String::new()
                             }
                         }
+                        "model" => {
+                            // Extract config from the upstream "config" port connection
+                            let config_json = upstream
+                                .values()
+                                .next()
+                                .cloned()
+                                .unwrap_or_else(|| {
+                                    r#"{"format":"openai","model_name":"","api_key":"","custom_url":""}"#.to_string()
+                                });
+
+                            // Simple JSON parsing since serde_json is not available in wasm
+                            fn get_json_str(json: &str, key: &str) -> String {
+                                let pattern = format!(r#""{}":"#, key);
+                                json.find(&pattern)
+                                    .map(|start| {
+                                        let value_start = start + pattern.len();
+                                        let rest = &json[value_start..];
+                                        if rest.starts_with('"') {
+                                            // Quoted string value
+                                            let end = rest[1..].find('"').map(|i| i + 1).unwrap_or(rest.len());
+                                            rest[1..end].to_string()
+                                        } else {
+                                            // Fallback for other values
+                                            rest.split(',').next().unwrap_or("").split('}').next().unwrap_or("").to_string()
+                                        }
+                                    })
+                                    .unwrap_or_default()
+                            }
+
+                            let config = crate::components::canvas::state::ModelConfig {
+                                format: get_json_str(&config_json, "format"),
+                                model_name: get_json_str(&config_json, "model_name"),
+                                api_key: get_json_str(&config_json, "api_key"),
+                                custom_url: get_json_str(&config_json, "custom_url"),
+                            };
+
+                            // prompt from upstream
+                            let prompt_text = upstream.values().next().cloned().unwrap_or_default();
+                            let temperature = 1.0;
+
+                            // Push a "waiting" task
+                            let mut model_task = crate::components::execution_engine::Task::new(
+                                exec_node_id, "model", parent_id.clone(),
+                            );
+                            model_task.status = crate::components::execution_engine::TaskStatus::Waiting;
+                            model_task.waiting_on = Some(exec_node_id);
+                            model_task.add_message(
+                                &format!("Model call: {} / {} / prompt_len={}", config.format, config.model_name, prompt_text.len()),
+                                crate::components::execution_engine::TraceLevel::Info,
+                            );
+                            exec.tasks.push(model_task);
+
+                            // Spawn async call
+                            let exec_state_setter = set_execution_state;
+                            spawn_local(async move {
+                                let result = call_llm_complete(
+                                    config.format.clone(),
+                                    config.model_name.clone(),
+                                    config.api_key.clone(),
+                                    config.custom_url.clone(),
+                                    prompt_text.clone(),
+                                    temperature,
+                                ).await;
+                                match result {
+                                    Ok(output) => {
+                                        let status = if output.error.is_empty() {
+                                            crate::components::execution_engine::TaskStatus::Complete
+                                        } else {
+                                            crate::components::execution_engine::TaskStatus::Error
+                                        };
+                                        let trace_msg = if output.error.is_empty() {
+                                            format!("LLM result: {} ({} tokens)", output.text, output.tokens_used)
+                                        } else {
+                                            format!("LLM error: {}", output.error)
+                                        };
+                                        exec_state_setter.update(|exec| {
+                                            if let Some(task) = exec.tasks.iter_mut().find(|t| t.node_id == exec_node_id) {
+                                                task.status = status;
+                                                task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
+                                                task.result = Some(output.text.clone());
+                                                task.add_message(
+                                                    &trace_msg,
+                                                    crate::components::execution_engine::TraceLevel::Info,
+                                                );
+                                            }
+                                        });
+                                    }
+                                    Err(e) => {
+                                        exec_state_setter.update(|exec| {
+                                            if let Some(task) = exec.tasks.iter_mut().find(|t| t.node_id == exec_node_id) {
+                                                task.status = crate::components::execution_engine::TaskStatus::Error;
+                                                task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
+                                                task.add_message(
+                                                    &format!("Model call failed: {}", e),
+                                                    crate::components::execution_engine::TraceLevel::Error,
+                                                );
+                                            }
+                                        });
+                                    }
+                                }
+                            });
+
+                            skip_post_push = true;
+                            String::new()
+                        }
+                        "model_config" => {
+                            let config_json = if let crate::components::canvas::state::NodeVariant::ModelConfig { format, model_name, api_key, custom_url } = &node.variant {
+                                format!(r#"{{"format":"{}","model_name":"{}","api_key":"{}","custom_url":"{}"}}"#, format, model_name, api_key, custom_url)
+                            } else {
+                                r#"{"format":"openai","model_name":"","api_key":"","custom_url":""}"#.to_string()
+                            };
+                            task.status = crate::components::execution_engine::TaskStatus::Complete;
+                            task.add_message("Model Config node", crate::components::execution_engine::TraceLevel::Info);
+                            config_json
+                        }
                         _ => {
                             task.add_message(&format!("{} executed", node.label), crate::components::execution_engine::TraceLevel::Info);
                             upstream.values().next().cloned().unwrap_or_default()
                         }
                     };
 
-                    task.result = Some(result.clone());
-                    node_results.insert(exec_node_id, result.clone());
+                    if !skip_post_push {
+                        task.result = Some(result.clone());
+                        node_results.insert(exec_node_id, result.clone());
 
-                    task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
-                    task.status = crate::components::execution_engine::TaskStatus::Complete;
-                    exec.tasks.push(task);
+                        task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
+                        task.status = crate::components::execution_engine::TaskStatus::Complete;
+                        exec.tasks.push(task);
+                    }
                 }
             }
         }

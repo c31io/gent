@@ -696,6 +696,16 @@ html, body, #app {
     border-color: var(--accent-color);
 }
 
+.node-variant-select {
+    width: 100%;
+    padding: 4px 8px;
+    font-size: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-secondary);
+    color: var(--text-color);
+}
+
 .node-variant-textarea {
     width: 100%;
     padding: 6px 8px;

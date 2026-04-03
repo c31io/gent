@@ -6,8 +6,17 @@ use crate::plugins::commands::{
 };
 use crate::scripts::commands::{list_scripts, read_script, save_script, run_script};
 
+mod llm;
 mod plugins;
 pub mod scripts;
+
+#[tauri::command]
+async fn llm_complete(
+    config: llm::LlmConfig,
+    input: llm::LlmInput,
+) -> Result<llm::LlmOutput, String> {
+    Ok(llm::llm_complete(config, input).await)
+}
 
 #[tauri::command]
 fn show_main_window(window: tauri::Window) -> Result<(), String> {
@@ -59,6 +68,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             show_main_window,
             execute_code,
+            llm_complete,
             load_plugin,
             load_plugin_from_path,
             list_plugins,

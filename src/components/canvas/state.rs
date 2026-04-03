@@ -16,6 +16,15 @@ pub enum PortType {
     Trigger,    // red #ef4444
 }
 
+/// Model node configuration
+#[derive(Clone, Debug)]
+pub struct ModelConfig {
+    pub format: String,       // "openai" | "anthropic"
+    pub model_name: String,  // e.g., "gpt-4o-mini", "claude-3-5-sonnet-latest"
+    pub api_key: String,
+    pub custom_url: String,
+}
+
 /// A port on a node with rendering offset calculated
 #[derive(Clone, Debug, Hash)]
 pub struct Port {
@@ -48,6 +57,13 @@ pub enum NodeVariant {
     Loop { iterations: u32 },
     ChatOutput { response: String },
     JsonOutput { schema: String },
+    ModelConfig {
+        format: String,       // "openai" | "anthropic"
+        model_name: String,  // e.g., "gpt-4o-mini", "claude-3-5-sonnet-latest"
+        api_key: String,
+        custom_url: String,
+    },
+    Model,
 }
 
 /// Execution status of a node
@@ -151,6 +167,19 @@ pub fn default_ports_for_type(node_type: &str) -> Vec<Port> {
         ],
         "chat_output" => vec![Port { name: "response".into(), port_type: PortType::Text, direction: PortDirection::In }],
         "json_output" => vec![Port { name: "data".into(), port_type: PortType::Text, direction: PortDirection::In }],
+        "model_config" => vec![
+            Port { name: "config".into(), port_type: PortType::Text, direction: PortDirection::Out },
+        ],
+        "model" => vec![
+            Port { name: "config".into(), port_type: PortType::Text, direction: PortDirection::In },
+            Port { name: "prompt".into(), port_type: PortType::Text, direction: PortDirection::In },
+            Port { name: "temperature".into(), port_type: PortType::Text, direction: PortDirection::In },
+            Port { name: "text".into(), port_type: PortType::Text, direction: PortDirection::Out },
+            Port { name: "tokens_used".into(), port_type: PortType::Text, direction: PortDirection::Out },
+            Port { name: "model".into(), port_type: PortType::Text, direction: PortDirection::Out },
+            Port { name: "finish_reason".into(), port_type: PortType::Text, direction: PortDirection::Out },
+            Port { name: "error".into(), port_type: PortType::Text, direction: PortDirection::Out },
+        ],
         _ => vec![],
     }
 }
@@ -176,6 +205,7 @@ pub fn get_output_ports(node_type: &str, variant: &NodeVariant) -> Vec<Port> {
     // TODO: Add dynamic output ports for Loop based on iterations if needed
 
     match node_type {
+        "model" => ports,
         "image_input" => ports,
         "audio_input" => ports,
         _ => ports,
@@ -258,6 +288,13 @@ pub fn default_variant_for_type(node_type: &str) -> NodeVariant {
         "loop" => NodeVariant::Loop { iterations: 3 },
         "chat_output" => NodeVariant::ChatOutput { response: String::new() },
         "json_output" => NodeVariant::JsonOutput { schema: String::new() },
+        "model" => NodeVariant::Model,
+        "model_config" => NodeVariant::ModelConfig {
+            format: "openai".into(),
+            model_name: String::new(),
+            api_key: String::new(),
+            custom_url: String::new(),
+        },
         _ => NodeVariant::Trigger,
     }
 }

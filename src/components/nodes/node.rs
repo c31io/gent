@@ -144,6 +144,51 @@ fn render_variant_body(variant: &NodeVariant, node_id: u32, on_text_change: &Opt
                 rows="2"
             >{schema.clone()}</textarea>
         }.into_any(),
+        NodeVariant::ModelConfig { format, model_name, api_key, custom_url } => view! {
+            <div class="node-variant-fields">
+                <div class="node-variant-field">
+                    <label>"Format"</label>
+                    <select class="node-variant-select">
+                        <option value="openai" selected={format == "openai"}>"OpenAI"</option>
+                        <option value="anthropic" selected={format == "anthropic"}>"Anthropic"</option>
+                    </select>
+                </div>
+                <div class="node-variant-field">
+                    <label>"Model Name"</label>
+                    <input
+                        type="text"
+                        class="node-variant-input"
+                        value={model_name.clone()}
+                        placeholder="gpt-4o-mini"
+                    />
+                </div>
+                <div class="node-variant-field">
+                    <label>"API Key"</label>
+                    <input
+                        type="password"
+                        class="node-variant-input"
+                        value={api_key.clone()}
+                        placeholder="key or leave empty for env"
+                    />
+                </div>
+                <div class="node-variant-field">
+                    <label>"API Endpoint"</label>
+                    <input
+                        type="text"
+                        class="node-variant-input"
+                        value={custom_url.clone()}
+                        placeholder="http://localhost:11434/v1"
+                    />
+                </div>
+            </div>
+        }.into_any(),
+        NodeVariant::Model => view! {
+            <div class="node-variant-fields">
+                <div class="node-variant-field">
+                    <span class="node-variant-static">"Config via port connection"</span>
+                </div>
+            </div>
+        }.into_any(),
         // Trigger variant is handled separately in the GraphNode view
         _ => view! { <div /> }.into_any(),
     }

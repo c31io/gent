@@ -85,6 +85,18 @@ pub const NODE_TYPES: &[NodeType] = &[
         category: "Agent",
         description: "Executes tasks",
     },
+    NodeType {
+        id: "model",
+        name: "Model",
+        category: "Agent",
+        description: "Call an LLM API with config from Model Config node",
+    },
+    NodeType {
+        id: "model_config",
+        name: "Model Config",
+        category: "Agent",
+        description: "Holds API configuration for Model node",
+    },
     // Tool
     NodeType {
         id: "web_search",

@@ -173,5 +173,30 @@ pub fn InspectorProperties(
                 <textarea class="property-textarea code" rows="4">{schema.clone()}</textarea>
             </div>
         }.into_any(),
+        NodeVariant::ModelConfig { format, model_name, api_key, custom_url } => view! {
+            <div class="property-groups">
+                <div class="property-group">
+                    <label class="property-label">"Format"</label>
+                    <input type="text" class="property-input" value={format.clone()} />
+                </div>
+                <div class="property-group">
+                    <label class="property-label">"Model Name"</label>
+                    <input type="text" class="property-input" value={model_name.clone()} />
+                </div>
+                <div class="property-group">
+                    <label class="property-label">"API Key"</label>
+                    <input type="password" class="property-input" value={api_key.clone()} />
+                </div>
+                <div class="property-group">
+                    <label class="property-label">"Custom URL"</label>
+                    <input type="text" class="property-input" value={custom_url.clone()} />
+                </div>
+            </div>
+        }.into_any(),
+        NodeVariant::Model => view! {
+            <div class="property-group">
+                <span class="property-readonly">"Model node — config comes via port connection"</span>
+            </div>
+        }.into_any(),
     }
 }
