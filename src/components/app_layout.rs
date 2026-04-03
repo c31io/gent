@@ -2,7 +2,7 @@ use leptos::prelude::*;
 use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::spawn_local;
 use gloo_timers::future::TimeoutFuture;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::components::canvas::state::{ConnectionState, NodeState, NodeStatus, default_ports_for_type, default_variant_for_type};
 use crate::components::canvas::Canvas;
@@ -130,7 +130,7 @@ pub fn AppLayout() -> impl IntoView {
             selected: false,
         },
     ]);
-    let (selected_node_id, set_selected_node_id) = signal(Option::<u32>::None);
+    let (selected_node_ids, set_selected_node_ids) = signal(HashSet::<u32>::new());
     let (deleting_node_id, set_deleting_node_id) = signal(Option::<u32>::None);
     let (next_node_id, set_next_node_id) = signal(4u32);
 
@@ -472,7 +472,10 @@ pub fn AppLayout() -> impl IntoView {
 
         set_nodes.update(|nodes: &mut Vec<NodeState>| nodes.push(new_node));
         set_next_node_id.update(|n| *n += 1);
-        set_selected_node_id.set(Some(node_id));
+        set_selected_node_ids.update(|ids| {
+            ids.clear();
+            ids.insert(node_id);
+        });
     };
 
     let handle_left_divider_mouse_down = move |ev: web_sys::MouseEvent| {
@@ -544,8 +547,8 @@ pub fn AppLayout() -> impl IntoView {
                 <Canvas
                     nodes={nodes.into()}
                     connections={connections.into()}
-                    selected_node_id={selected_node_id.into()}
-                    set_selected_node_id={set_selected_node_id}
+                    selected_node_ids={selected_node_ids.into()}
+                    set_selected_node_ids={set_selected_node_ids}
                     set_nodes={set_nodes}
                     set_connections={set_connections}
                     deleting_node_id={Some(deleting_node_id.into())}
@@ -584,18 +587,31 @@ pub fn AppLayout() -> impl IntoView {
             {/* Node Inspector Drawer */}
             <NodeInspector
                 selected_node={inspector_node.into()}
-                on_node_delete={Some(Callback::new(move |node_id| {
-                    // Unselect the node and set deleting_node_id to trigger the shrink animation
-                    set_selected_node_id.set(None);
-                    set_deleting_node_id.set(Some(node_id));
-                    // After animation completes (200ms), remove the node
+                on_node_delete={Some(Callback::new(move |node_id: u32| {
+                    // Get current selection
+                    let selected = selected_node_ids.get();
+                    let to_delete: HashSet<u32> = if selected.contains(&node_id) {
+                        // If the deleted node is in selection, delete all selected
+                        selected.clone()
+                    } else {
+                        // Otherwise just delete the single node
+                        let mut s = HashSet::new();
+                        s.insert(node_id);
+                        s
+                    };
+
+                    // Set all as deleting
+                    set_deleting_node_id.set(Some(*to_delete.iter().next().unwrap()));
+                    set_selected_node_ids.update(|ids| ids.clear());
+
+                    // After animation, remove nodes and their connections
                     spawn_local(async move {
-                        TimeoutFuture::new(200).await;
+                        let ids_to_delete = to_delete.clone();
                         set_nodes.update(|nodes| {
-                            nodes.retain(|n| n.id != node_id);
+                            nodes.retain(|n| !ids_to_delete.contains(&n.id));
                         });
                         set_connections.update(|conns| {
-                            conns.retain(|c| c.source_node_id != node_id && c.target_node_id != node_id);
+                            conns.retain(|c| !ids_to_delete.contains(&c.source_node_id) && !ids_to_delete.contains(&c.target_node_id));
                         });
                         set_deleting_node_id.set(None);
                     });
