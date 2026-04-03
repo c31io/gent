@@ -171,21 +171,15 @@ fn render_variant_body(variant: &NodeVariant, node_id: u32, on_text_change: &Opt
                         placeholder="key or leave empty for env"
                     />
                 </div>
-                {if config.format == "openai-compatible" {
-                    view! {
-                        <div class="node-variant-field">
-                            <label>"Custom URL"</label>
-                            <input
-                                type="text"
-                                class="node-variant-input"
-                                value={config.custom_url.clone()}
-                                placeholder="http://localhost:11434/v1"
-                            />
-                        </div>
-                    }.into_any()
-                } else {
-                    view! { <></> }.into_any()
-                }}
+                <div class="node-variant-field">
+                    <label>"API Endpoint"</label>
+                    <input
+                        type="text"
+                        class="node-variant-input"
+                        value={config.custom_url.clone()}
+                        placeholder="http://localhost:11434/v1"
+                    />
+                </div>
             </div>
         }.into_any(),
         // Trigger variant is handled separately in the GraphNode view
