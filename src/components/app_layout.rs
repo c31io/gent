@@ -4,7 +4,7 @@ use wasm_bindgen_futures::spawn_local;
 use gloo_timers::future::TimeoutFuture;
 use std::collections::HashMap;
 
-use crate::components::canvas::state::{ConnectionState, NodeState, NodeStatus, LlmConfig, default_ports_for_type, default_variant_for_type};
+use crate::components::canvas::state::{ConnectionState, NodeState, NodeStatus, default_ports_for_type, default_variant_for_type};
 use crate::components::canvas::Canvas;
 use crate::components::execution_engine::ExecutionState;
 use crate::components::left_panel::{LeftPanel, NODE_TYPES};
@@ -311,9 +311,9 @@ pub fn AppLayout() -> impl IntoView {
                             let config = if let crate::components::canvas::state::NodeVariant::LLM { config } = &node.variant {
                                 config.clone()
                             } else {
-                                crate::components::canvas::state::LlmConfig {
+                                crate::components::canvas::state::ModelConfig {
                                     format: "openai".into(),
-                                    model_size: "M".into(),
+                                    model_name: String::new(),
                                     api_key: String::new(),
                                     custom_url: String::new(),
                                 }
@@ -340,7 +340,7 @@ pub fn AppLayout() -> impl IntoView {
                             llm_task.status = crate::components::execution_engine::TaskStatus::Waiting;
                             llm_task.waiting_on = Some(exec_node_id);
                             llm_task.add_message(
-                                &format!("LLM call: {} / {} / prompt_len={}", config.format, config.model_size, prompt_text.len()),
+                                &format!("LLM call: {} / {} / prompt_len={}", config.format, config.model_name, prompt_text.len()),
                                 crate::components::execution_engine::TraceLevel::Info,
                             );
                             exec.tasks.push(llm_task);
@@ -350,7 +350,7 @@ pub fn AppLayout() -> impl IntoView {
                             spawn_local(async move {
                                 let result = call_llm_complete(
                                     config.format.clone(),
-                                    config.model_size.clone(),
+                                    config.model_name.clone(),
                                     config.api_key.clone(),
                                     config.custom_url.clone(),
                                     prompt_text.clone(),

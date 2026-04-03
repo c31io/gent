@@ -156,9 +156,9 @@ fn render_variant_body(variant: &NodeVariant, node_id: u32, on_text_change: &Opt
                 <div class="node-variant-field">
                     <label>"Size"</label>
                     <select class="node-variant-select">
-                        <option value="S" selected={config.model_size == "S"}>"S"</option>
-                        <option value="M" selected={config.model_size == "M"}>"M"</option>
-                        <option value="L" selected={config.model_size == "L"}>"L"</option>
+                        <option value="S" selected={config.model_name == "S"}>"S"</option>
+                        <option value="M" selected={config.model_name == "M"}>"M"</option>
+                        <option value="L" selected={config.model_name == "L"}>"L"</option>
                     </select>
                 </div>
                 <div class="node-variant-field">
