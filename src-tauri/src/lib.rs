@@ -48,6 +48,20 @@ fn execute_code(code: String) -> Result<String, String> {
     }
 }
 
+#[tauri::command]
+async fn import_graph(path: String) -> Result<String, String> {
+    use std::fs;
+    fs::read_to_string(&path)
+        .map_err(|e| format!("failed to read file: {}", e))
+}
+
+#[tauri::command]
+async fn export_graph(path: String, json: String) -> Result<(), String> {
+    use std::fs;
+    fs::write(&path, json)
+        .map_err(|e| format!("failed to write file: {}", e))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize Rune engine singleton
@@ -79,6 +93,9 @@ pub fn run() {
             read_script,
             save_script,
             run_script,
+            // Import/Export commands
+            import_graph,
+            export_graph,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
