@@ -181,7 +181,9 @@ pub fn Canvas(
                         !(conn.source_node_id == dc.source_node_id && conn.target_node_id == src_input)
                     ));
                 }
-                set_connections.update(|c: &mut Vec<ConnectionState>| c.retain(|conn| conn.target_node_id != node_id));
+                set_connections.update(|c: &mut Vec<ConnectionState>| c.retain(|conn|
+                    !(conn.target_node_id == node_id && conn.target_port_name == target_port_name)
+                ));
                 let new_conn = ConnectionState {
                     id: next_connection_id.get(),
                     source_node_id: dc.source_node_id,
