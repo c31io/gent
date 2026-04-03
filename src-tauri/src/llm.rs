@@ -5,7 +5,7 @@ use std::env;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmConfig {
     pub format: String,       // "openai" | "anthropic"
-    pub model_size: String,   // "S" | "M" | "L"
+    pub model_name: String,   // e.g., "gpt-4o-mini" — used directly
     pub api_key: String,
     pub custom_url: String,   // custom endpoint base URL (optional, overrides default)
 }
@@ -23,18 +23,6 @@ pub struct LlmOutput {
     pub model: String,
     pub finish_reason: String,
     pub error: String,
-}
-
-fn get_model_for_size(format: &str, size: &str) -> &'static str {
-    match (format, size) {
-        ("openai", "S") => "gpt-4o-mini",
-        ("openai", "M") => "gpt-4o",
-        ("openai", "L") => "gpt-4-turbo",
-        ("anthropic", "S") => "claude-3-5-haiku-20241022",
-        ("anthropic", "M") => "claude-3-5-sonnet-latest",
-        ("anthropic", "L") => "claude-3-5-opus-latest",
-        _ => "gpt-4o",
-    }
 }
 
 fn resolve_api_key(config: &LlmConfig) -> Result<String, String> {
@@ -97,7 +85,7 @@ struct AnthropicUsage {
 }
 
 pub async fn llm_complete(config: LlmConfig, input: LlmInput) -> LlmOutput {
-    let model = get_model_for_size(&config.format, &config.model_size);
+    let model = config.model_name.clone();
     let api_key = match resolve_api_key(&config) {
         Ok(k) => k,
         Err(e) => {
