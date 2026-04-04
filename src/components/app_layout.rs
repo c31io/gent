@@ -10,6 +10,7 @@ use crate::components::canvas::Canvas;
 use crate::components::canvas::geometry::is_text_input_keyboard;
 use crate::components::execution_engine::ExecutionState;
 use crate::components::left_panel::{LeftPanel, NODE_TYPES};
+use crate::components::graph_section::GraphSection;
 use crate::components::right_panel::RightPanel;
 use crate::components::node_inspector::NodeInspector;
 use crate::components::save_load::{copy_to_clipboard, paste_from_clipboard, load_selection, save_saved_selections_to_storage, generate_id};
@@ -154,6 +155,15 @@ pub fn AppLayout() -> impl IntoView {
     let (toasts, set_toasts) = signal(Vec::<Toast>::new());
     let (next_toast_id, set_next_toast_id) = signal(0u32);
     let (next_connection_id, set_next_connection_id) = signal(100u32);
+
+    // Load saved selections on mount
+    {
+        let set_saved_selections = set_saved_selections.clone();
+        spawn_local(async move {
+            let loaded = crate::components::save_load::load_saved_selections();
+            set_saved_selections.set(loaded);
+        });
+    }
 
     // Handler for text input changes
     let handle_text_change = move |node_id: u32, new_text: String| {
@@ -699,6 +709,43 @@ pub fn AppLayout() -> impl IntoView {
         }
     };
 
+    // Callback to load a saved selection into canvas
+    let on_load_selection = {
+        let mut set_nodes = set_nodes.clone();
+        let mut set_connections = set_connections.clone();
+        let mut set_next_node_id = set_next_node_id.clone();
+        let mut set_next_connection_id = set_next_connection_id.clone();
+        let mut next_node_id = next_node_id.clone();
+        let mut next_connection_id = next_connection_id.clone();
+        let mut add_toast = add_toast.clone();
+        Callback::new(move |selection: SavedSelection| {
+            let (new_nodes, new_conns, next_id, next_conn) = crate::components::save_load::load_selection(
+                selection,
+                next_node_id.get(),
+                next_connection_id.get(),
+            );
+            set_nodes.update(|n| n.extend(new_nodes));
+            set_connections.update(|c| c.extend(new_conns));
+            set_next_node_id.set(next_id);
+            set_next_connection_id.set(next_conn);
+            add_toast("Selection loaded".to_string(), ToastType::Success);
+        })
+    };
+
+    // Callback to delete a saved selection
+    let on_delete_selection = {
+        let mut set_saved_selections = set_saved_selections.clone();
+        let mut add_toast = add_toast.clone();
+        Callback::new(move |id: String| {
+            set_saved_selections.update(|selections| {
+                selections.retain(|s| s.id != id);
+            });
+            let selections = set_saved_selections.get();
+            crate::components::save_load::save_saved_selections_to_storage(&selections);
+            add_toast("Selection deleted".to_string(), ToastType::Info);
+        })
+    };
+
     view! {
         <div
             class="app-layout"
@@ -712,7 +759,12 @@ pub fn AppLayout() -> impl IntoView {
                     class="panel"
                     style:width=move || format!("{}px", left_width.get())
                 >
-                    <LeftPanel on_drag_start={Some(on_palette_drag_start)} />
+                    <LeftPanel
+                        on_drag_start={Some(on_palette_drag_start)}
+                        saved_selections={saved_selections}
+                        on_load_selection={on_load_selection}
+                        on_delete_selection={on_delete_selection}
+                    />
                 </div>
 
                 {/* Left Divider */}

@@ -1,4 +1,6 @@
 use leptos::prelude::*;
+use crate::components::canvas::state::{SavedSelection, BundledGroup};
+use crate::components::graph_section::GraphSection;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Tab {
@@ -173,8 +175,17 @@ fn TabBar(active_tab: ReadSignal<Tab>, set_active_tab: WriteSignal<Tab>) -> impl
 pub fn LeftPanel(
     /// Callback when drag starts from palette
     #[prop(default = None)] on_drag_start: Option<Callback<String>>,
+    /// Saved selections signal (ReadSignal<Vec<SavedSelection>>)
+    saved_selections: Signal<Vec<SavedSelection>>,
+    /// Callback when a saved selection is loaded
+    on_load_selection: Callback<SavedSelection>,
+    /// Callback when a saved selection is deleted
+    on_delete_selection: Callback<String>,
 ) -> impl IntoView {
     let (active_tab, set_active_tab) = signal(Tab::default());
+
+    // Default no-op callback for bundle loading (not yet implemented)
+    let default_on_load_bundle = Callback::new(|_: BundledGroup| {});
 
     view! {
         <>
@@ -186,7 +197,12 @@ pub fn LeftPanel(
                 Tab::Plugins => view! { <crate::components::plugin_manager::PluginManager /> }.into_any(),
                 Tab::Graph => view! {
                     <div class="panel-content">
-                        <div class="empty-message">"Graph templates coming soon"</div>
+                        <GraphSection
+                            saved_selections={saved_selections}
+                            on_load_selection={on_load_selection}
+                            on_delete_selection={on_delete_selection}
+                            on_load_bundle={default_on_load_bundle}
+                        />
                     </div>
                 }.into_any(),
             }}
