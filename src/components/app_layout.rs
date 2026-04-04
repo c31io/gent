@@ -1,15 +1,18 @@
 use leptos::prelude::*;
 use wasm_bindgen::JsValue;
+use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
-use gloo_timers::future::TimeoutFuture;
 use std::collections::{HashMap, HashSet};
 
-use crate::components::canvas::state::{ConnectionState, NodeState, NodeStatus, default_ports_for_type, default_variant_for_type};
+use crate::components::canvas::state::{ConnectionState, NodeState, NodeStatus, SavedSelection, default_ports_for_type, default_variant_for_type};
 use crate::components::canvas::Canvas;
 use crate::components::execution_engine::ExecutionState;
 use crate::components::left_panel::{LeftPanel, NODE_TYPES};
 use crate::components::right_panel::RightPanel;
 use crate::components::node_inspector::NodeInspector;
+use crate::components::toast::{Toast, ToastType, ToastContainer};
+use crate::components::modal::{ConfirmModal, CredentialPromptModal};
+use crate::components::save_load::{load_saved_selections, save_saved_selections_to_storage, copy_to_clipboard, paste_from_clipboard, generate_id, load_selection};
 
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct LlmOutput {
@@ -144,6 +147,184 @@ pub fn AppLayout() -> impl IntoView {
 
     // Execution state for the execution engine
     let (execution_state, set_execution_state) = signal(ExecutionState::new());
+
+    // Toast notifications
+    let (toasts, set_toasts) = signal(vec![]);
+    let (next_toast_id, set_next_toast_id) = signal(0u32);
+
+    // Helper to add a toast
+    let add_toast = move |message: String, toast_type: ToastType| {
+        let id = next_toast_id.get();
+        set_next_toast_id.update(|n| *n += 1);
+        set_toasts.update(|t| t.push(Toast { id, message, toast_type }));
+    };
+
+    // Dismiss toast handler
+    let dismiss_toast = move |id: u32| {
+        set_toasts.update(|t| t.retain(|toast| toast.id != id));
+    };
+
+    // Modal state
+    let (confirm_modal_visible, set_confirm_modal_visible) = signal(false);
+    let (confirm_modal_title, set_confirm_modal_title) = signal(String::new());
+    let (confirm_modal_message, set_confirm_modal_message) = signal(String::new());
+    let (confirm_modal_action, set_confirm_modal_action) = signal(Option::<Callback<()>>::None);
+
+    let (credential_modal_visible, set_credential_modal_visible) = signal(false);
+    let (credential_modal_title, set_credential_modal_title) = signal(String::new());
+    let (credential_modal_message, set_credential_modal_message) = signal(String::new());
+    let (credential_modal_action, set_credential_modal_action) = signal(Option::<Callback<bool>>::None);
+
+    // Saved selections (loaded from localStorage)
+    let (saved_selections, set_saved_selections) = signal(load_saved_selections());
+
+    // Next connection ID counter
+    let (next_conn_id, set_next_conn_id) = signal(3u32);
+
+    // Keyboard shortcut handler
+    let handle_key_down = move |ev: web_sys::KeyboardEvent| {
+        let ctrl = ev.ctrl_key();
+        let key = ev.key();
+
+        // Escape - clear selection
+        if key == "Escape" {
+            set_selected_node_ids.update(|ids| ids.clear());
+            set_inspector_node.set(None);
+            return;
+        }
+
+        // Ctrl+A - select all nodes
+        if ctrl && key == "A" {
+            ev.prevent_default();
+            let all_ids: HashSet<u32> = nodes.get().iter().map(|n| n.id).collect();
+            set_selected_node_ids.set(all_ids);
+            return;
+        }
+
+        // Ctrl+C - copy selected nodes
+        if ctrl && key == "C" {
+            ev.prevent_default();
+            let selected = selected_node_ids.get();
+            if selected.is_empty() {
+                add_toast("No nodes selected to copy".to_string(), ToastType::Info);
+                return;
+            }
+            // Show credential prompt before copying
+            set_credential_modal_title.set("Copy Selection".to_string());
+            set_credential_modal_message.set(format!("Copy {} selected nodes to clipboard?", selected.len()));
+            set_credential_modal_action.set(Some(Callback::new(move |strip| {
+                let selected_ids = selected.clone();
+                let nodes_snapshot = nodes.get();
+                let conns_snapshot = connections.get();
+                let selected_nodes: Vec<NodeState> = nodes_snapshot.into_iter().filter(|n| selected_ids.contains(&n.id)).collect();
+                let selected_conns: Vec<ConnectionState> = conns_snapshot.into_iter().filter(|c| selected_ids.contains(&c.source_node_id) && selected_ids.contains(&c.target_node_id)).collect();
+                let selection = SavedSelection {
+                    id: generate_id(),
+                    name: String::new(),
+                    created_at: js_sys::Date::now(),
+                    nodes: selected_nodes,
+                    connections: selected_conns,
+                };
+                spawn_local(async move {
+                    match copy_to_clipboard(selection, strip).await {
+                        Ok(_) => {
+                            // Toast would be shown via callback but we can't capture set_toasts in async
+                        }
+                        Err(e) => {
+                            // Error handling
+                        }
+                    }
+                });
+            })));
+            set_credential_modal_visible.set(true);
+            return;
+        }
+
+        // Ctrl+V - paste from clipboard
+        if ctrl && key == "V" {
+            ev.prevent_default();
+            spawn_local(async move {
+                match paste_from_clipboard().await {
+                    Ok(selection) => {
+                        let count = selection.nodes.len();
+                        let (new_nodes, new_conns, new_node_id, new_conn_id) = load_selection(selection, next_node_id.get(), next_conn_id.get());
+                        set_next_node_id.set(new_node_id);
+                        set_next_conn_id.set(new_conn_id);
+                        set_nodes.update(|n| n.extend(new_nodes));
+                        set_connections.update(|c| c.extend(new_conns));
+                        add_toast(format!("Pasted {} nodes", count), ToastType::Success);
+                    }
+                    Err(e) => {
+                        add_toast(format!("Paste failed: {}", e), ToastType::Error);
+                    }
+                }
+            });
+            return;
+        }
+
+        // Ctrl+S - save selection
+        if ctrl && key == "S" {
+            ev.prevent_default();
+            let selected = selected_node_ids.get();
+            if selected.is_empty() {
+                add_toast("No nodes selected to save".to_string(), ToastType::Info);
+                return;
+            }
+            // For now just save with empty name - modal would ask for name
+            let nodes_snapshot = nodes.get();
+            let conns_snapshot = connections.get();
+            let selected_nodes: Vec<NodeState> = nodes_snapshot.into_iter().filter(|n| selected.contains(&n.id)).collect();
+            let selected_conns: Vec<ConnectionState> = conns_snapshot.into_iter().filter(|c| selected.contains(&c.source_node_id) && selected.contains(&c.target_node_id)).collect();
+            let selection = SavedSelection {
+                id: generate_id(),
+                name: format!("Selection {}", saved_selections.get().len() + 1),
+                created_at: js_sys::Date::now(),
+                nodes: selected_nodes,
+                connections: selected_conns,
+            };
+            set_saved_selections.update(|s| {
+                s.push(selection.clone());
+            });
+            save_saved_selections_to_storage(&saved_selections.get());
+            add_toast("Selection saved".to_string(), ToastType::Success);
+            return;
+        }
+
+        // Delete/Backspace - delete selected nodes
+        if key == "Delete" || key == "Backspace" {
+            // Don't delete if focus is on an input element
+            if let Some(target) = ev.target() {
+                if let Some(element) = target.dyn_ref::<web_sys::Element>() {
+                    let tag_name = element.tag_name();
+                    if tag_name == "INPUT" || tag_name == "TEXTAREA" {
+                        return;
+                    }
+                }
+            }
+            let selected = selected_node_ids.get();
+            if selected.is_empty() {
+                return;
+            }
+            // Set all as deleting
+            if let Some(first_id) = selected.iter().next() {
+                set_deleting_node_id.set(Some(*first_id));
+            }
+            set_selected_node_ids.update(|ids| ids.clear());
+            // After animation, remove nodes and connections
+            let selected_clone = selected.clone();
+            spawn_local(async move {
+                set_nodes.update(|nodes| {
+                    nodes.retain(|n| !selected_clone.contains(&n.id));
+                });
+                set_connections.update(|conns| {
+                    conns.retain(|c| !selected_clone.contains(&c.source_node_id) && !selected_clone.contains(&c.target_node_id));
+                });
+                set_deleting_node_id.set(None);
+            });
+            set_inspector_node.set(None);
+            add_toast(format!("Deleted {} nodes", selected.len()), ToastType::Info);
+        }
+    };
 
     // Handler for text input changes
     let handle_text_change = move |node_id: u32, new_text: String| {
@@ -524,9 +705,11 @@ pub fn AppLayout() -> impl IntoView {
     view! {
         <div
             class="app-layout"
+            tabindex="0"
             on:mousemove={handle_global_mousemove}
             on:mouseup={handle_mouse_up}
             on:mouseleave={handle_mouse_up}
+            on:keydown={handle_key_down}
         >
             <div class="app-layout-main">
                 {/* Left Panel */}
@@ -643,6 +826,44 @@ pub fn AppLayout() -> impl IntoView {
                     None
                 }
             }}
+
+            {/* Toast Notifications */}
+            <ToastContainer
+                toasts={toasts.into()}
+                on_dismiss={Callback::new(dismiss_toast)}
+            />
+
+            {/* Confirm Modal */}
+            <ConfirmModal
+                visible={confirm_modal_visible.get()}
+                title={confirm_modal_title.get()}
+                message={confirm_modal_message.get()}
+                on_confirm={Callback::new(move |_| {
+                    if let Some(action) = confirm_modal_action.get() {
+                        action.run(());
+                    }
+                    set_confirm_modal_visible.set(false);
+                })}
+                on_cancel={Callback::new(move |_| {
+                    set_confirm_modal_visible.set(false);
+                })}
+            />
+
+            {/* Credential Prompt Modal */}
+            <CredentialPromptModal
+                visible={credential_modal_visible.get()}
+                title={credential_modal_title.get()}
+                message={credential_modal_message.get()}
+                on_confirm={Callback::new(move |strip| {
+                    if let Some(action) = credential_modal_action.get() {
+                        action.run(strip);
+                    }
+                    set_credential_modal_visible.set(false);
+                })}
+                on_cancel={Callback::new(move |_| {
+                    set_credential_modal_visible.set(false);
+                })}
+            />
         </div>
     }
 }
