@@ -11,3 +11,4 @@ pub mod script_editor;
 pub mod toast;
 pub mod modal;
 pub mod save_load;
+pub mod graph_section;

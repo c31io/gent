@@ -33,7 +33,7 @@ pub fn GraphSection(
             <div class="graph-subsection">
                 <div
                     class="graph-subsection-header"
-                    on:click={move |_| set_bundled_expanded.update(|v| !v)}
+                    on:click={move |_| set_bundled_expanded.update(|v| *v = !*v)}
                 >
                     <span class="expand-icon">{if bundled_expanded.get() { "▼" } else { "▶" }}</span>
                     <span>"Bundled"</span>
@@ -76,29 +76,34 @@ pub fn GraphSection(
             <div class="graph-subsection">
                 <div
                     class="graph-subsection-header"
-                    on:click={move |_| set_saved_expanded.update(|v| !v)}
+                    on:click={move |_| set_saved_expanded.update(|v| *v = !*v)}
                 >
                     <span class="expand-icon">{if saved_expanded.get() { "▼" } else { "▶" }}</span>
                     <span>"Saved"</span>
                 </div>
                 {move || if saved_expanded.get() {
+                    let selections_vec = saved_selections.get();
                     view! {
                         <div class="graph-subsection-content">
-                            {if saved_selections.get().is_empty() {
+                            {if selections_vec.is_empty() {
                                 view! { <div class="empty-message">"No saved selections"</div> }.into_any()
                             } else {
-                                saved_selections.get().iter().map(|selection| {
+                                let items: Vec<_> = (0..selections_vec.len()).map(|i| {
+                                    let selection = &selections_vec[i];
                                     let selection_clone = selection.clone();
+                                    let selection_id_for_drag = selection.id.clone();
+                                    let selection_id_for_click = selection.id.clone();
+                                    let selection_name = selection.name.clone();
                                     view! {
                                         <div
                                             class="saved-item"
                                             draggable=true
-                                            on:dragstart={move |ev| {
+                                            on:dragstart={move |_ev| {
                                                 if let Some(window) = web_sys::window() {
                                                     let _ = js_sys::Reflect::set(
                                                         &window,
                                                         &"draggedSelectionId".into(),
-                                                        &selection.id.clone().into()
+                                                        &selection_id_for_drag.clone().into()
                                                     );
                                                 }
                                             }}
@@ -106,19 +111,20 @@ pub fn GraphSection(
                                                 on_load_selection.run(selection_clone.clone());
                                             }}
                                         >
-                                            <span class="item-name">{selection.name.clone()}</span>
+                                            <span class="item-name">{selection_name.clone()}</span>
                                             <button
                                                 class="delete-save-btn"
                                                 on:click={move |ev| {
                                                     ev.stop_propagation();
-                                                    on_delete_selection.run(selection.id.clone());
+                                                    on_delete_selection.run(selection_id_for_click.clone());
                                                 }}
                                             >
                                                 "×"
                                             </button>
                                         </div>
                                     }
-                                }).collect::<Vec<_>>().into_any()
+                                }).collect();
+                                items.into_any()
                             }}
                         </div>
                     }.into_any()

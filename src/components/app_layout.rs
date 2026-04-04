@@ -734,13 +734,14 @@ pub fn AppLayout() -> impl IntoView {
 
     // Callback to delete a saved selection
     let on_delete_selection = {
-        let mut set_saved_selections = set_saved_selections.clone();
-        let mut add_toast = add_toast.clone();
+        let saved_selections_clone = saved_selections.clone();
+        let set_saved_selections = set_saved_selections.clone();
+        let add_toast = add_toast.clone();
         Callback::new(move |id: String| {
             set_saved_selections.update(|selections| {
                 selections.retain(|s| s.id != id);
             });
-            let selections = set_saved_selections.get();
+            let selections = saved_selections_clone.get();
             crate::components::save_load::save_saved_selections_to_storage(&selections);
             add_toast("Selection deleted".to_string(), ToastType::Info);
         })
@@ -761,7 +762,7 @@ pub fn AppLayout() -> impl IntoView {
                 >
                     <LeftPanel
                         on_drag_start={Some(on_palette_drag_start)}
-                        saved_selections={saved_selections}
+                        saved_selections={saved_selections.into()}
                         on_load_selection={on_load_selection}
                         on_delete_selection={on_delete_selection}
                     />
