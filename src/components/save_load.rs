@@ -46,14 +46,13 @@ pub fn strip_credentials(selection: &mut SavedSelection) {
 
 /// Generate a UUID-like ID for new saves using timestamp + random
 pub fn generate_id() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let duration = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    let timestamp = js_sys::Date::now() as u64;
     let random_part: u32 = {
         use std::collections::hash_map::RandomState;
         use std::hash::{BuildHasher, Hasher};
         RandomState::new().build_hasher().finish() as u32
     };
-    format!("{:x}-{:x}", duration.as_millis(), random_part)
+    format!("{:x}-{:x}", timestamp, random_part)
 }
 
 /// Load a saved selection into the canvas state
