@@ -5,6 +5,7 @@ use wasm_bindgen_futures::spawn_local;
 use std::collections::{HashMap, HashSet};
 
 use crate::components::canvas::state::{ConnectionState, NodeState, NodeStatus, SavedSelection, default_ports_for_type, default_variant_for_type};
+use crate::components::canvas::geometry::is_text_input_keyboard;
 use crate::components::canvas::Canvas;
 use crate::components::execution_engine::ExecutionState;
 use crate::components::left_panel::{LeftPanel, NODE_TYPES};
@@ -293,13 +294,8 @@ pub fn AppLayout() -> impl IntoView {
         // Delete/Backspace - delete selected nodes
         if key == "Delete" || key == "Backspace" {
             // Don't delete if focus is on an input element
-            if let Some(target) = ev.target() {
-                if let Some(element) = target.dyn_ref::<web_sys::Element>() {
-                    let tag_name = element.tag_name();
-                    if tag_name == "INPUT" || tag_name == "TEXTAREA" {
-                        return;
-                    }
-                }
+            if is_text_input_keyboard(&ev) {
+                return;
             }
             let selected = selected_node_ids.get();
             if selected.is_empty() {
