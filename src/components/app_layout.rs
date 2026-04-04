@@ -698,13 +698,26 @@ pub fn AppLayout() -> impl IntoView {
         }
     };
 
+    // Window-level keyboard event listener for shortcuts
+    static KEYBOARD_LISTENER_ADDED: std::sync::Once = std::sync::Once::new();
+    let handle_key_down_clone = handle_key_down.clone();
+    let keydown_closure = wasm_bindgen::closure::Closure::wrap(Box::new(move |ev: web_sys::KeyboardEvent| {
+        handle_key_down_clone(ev);
+    }) as Box<dyn Fn(_)>);
+
+    KEYBOARD_LISTENER_ADDED.call_once(|| {
+        if let Some(w) = web_sys::window() {
+            w.add_event_listener_with_callback("keydown", keydown_closure.as_ref().unchecked_ref()).ok();
+        }
+    });
+    keydown_closure.forget();
+
     view! {
         <div
             class="app-layout"
             on:mousemove={handle_global_mousemove}
             on:mouseup={handle_mouse_up}
             on:mouseleave={handle_mouse_up}
-            on:keydown={handle_key_down}
         >
             <div class="app-layout-main">
                 {/* Left Panel */}
