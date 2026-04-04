@@ -31,7 +31,8 @@
       "Read(//c/Users/c31io/.cargo/**)",
       "Bash(cargo tauri:*)",
       "Bash(git commit:*)",
-      "Read(//c/Users/c31io/Documents/GitHub/gent/src/components/canvas/**)"
+      "Read(//c/Users/c31io/Documents/GitHub/gent/src/components/canvas/**)",
+      "Read(//c/Users/c31io/.claude/projects/c--Users-c31io-Documents-GitHub-gent--claude-worktrees-multi-select-save-load/memory/**)"
     ],
     "additionalDirectories": [
       "c:\\Users\\c31io\\Documents\\GitHub\\gent\\docs\\superpowers",

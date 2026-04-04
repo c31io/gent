@@ -1,15 +1,19 @@
 use leptos::prelude::*;
+use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::spawn_local;
 use gloo_timers::future::TimeoutFuture;
 use std::collections::{HashMap, HashSet};
 
-use crate::components::canvas::state::{ConnectionState, NodeState, NodeStatus, default_ports_for_type, default_variant_for_type};
+use crate::components::canvas::state::{ConnectionState, NodeState, NodeStatus, SavedSelection, default_ports_for_type, default_variant_for_type};
 use crate::components::canvas::Canvas;
+use crate::components::canvas::geometry::is_text_input_keyboard;
 use crate::components::execution_engine::ExecutionState;
 use crate::components::left_panel::{LeftPanel, NODE_TYPES};
 use crate::components::right_panel::RightPanel;
 use crate::components::node_inspector::NodeInspector;
+use crate::components::save_load::{copy_to_clipboard, paste_from_clipboard, load_selection, save_saved_selections_to_storage, generate_id};
+use crate::components::toast::{ToastContainer, Toast, ToastType};
 
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct LlmOutput {
@@ -145,6 +149,12 @@ pub fn AppLayout() -> impl IntoView {
     // Execution state for the execution engine
     let (execution_state, set_execution_state) = signal(ExecutionState::new());
 
+    // Keyboard shortcut state
+    let (saved_selections, set_saved_selections) = signal(Vec::<SavedSelection>::new());
+    let (toasts, set_toasts) = signal(Vec::<Toast>::new());
+    let (next_toast_id, set_next_toast_id) = signal(0u32);
+    let (next_connection_id, set_next_connection_id) = signal(100u32);
+
     // Handler for text input changes
     let handle_text_change = move |node_id: u32, new_text: String| {
         set_nodes.update(|nodes: &mut Vec<NodeState>| {
@@ -155,6 +165,174 @@ pub fn AppLayout() -> impl IntoView {
             }
         });
     };
+
+    // Toast helper function
+    let add_toast = {
+        let set_toasts = set_toasts.clone();
+        let next_toast_id = next_toast_id;
+        let set_next_toast_id = set_next_toast_id;
+        move |message: String, toast_type: ToastType| {
+            let id = next_toast_id.get();
+            set_next_toast_id.update(|n| *n += 1);
+            set_toasts.update(|t| t.push(Toast { id, message, toast_type }));
+            let set_toasts_clone = set_toasts.clone();
+            spawn_local(async move {
+                TimeoutFuture::new(3000).await;
+                set_toasts_clone.update(|t| t.retain(|toast| toast.id != id));
+            });
+        }
+    };
+
+    // Non-passive window keydown listener
+    static KEYDOWN_LISTENER_ADDED: std::sync::Once = std::sync::Once::new();
+    let keydown_closure = wasm_bindgen::closure::Closure::wrap(Box::new({
+        let mut nodes = nodes.clone();
+        let mut connections = connections.clone();
+        let mut selected_node_ids = selected_node_ids.clone();
+        let mut set_selected_node_ids = set_selected_node_ids.clone();
+        let mut set_nodes = set_nodes.clone();
+        let mut set_connections = set_connections.clone();
+        let mut set_deleting_node_id = set_deleting_node_id.clone();
+        let mut set_next_node_id = set_next_node_id.clone();
+        let mut set_next_connection_id = set_next_connection_id.clone();
+        let mut next_node_id = next_node_id.clone();
+        let mut next_connection_id = next_connection_id.clone();
+        let mut saved_selections = saved_selections.clone();
+        let mut set_saved_selections = set_saved_selections.clone();
+        let mut add_toast = add_toast.clone();
+        let on_selection_change = None::<Callback<Option<u32>>>;
+
+        move |ev: web_sys::KeyboardEvent| {
+            let ctrl = ev.ctrl_key() || ev.meta_key();
+            let key = ev.key();
+
+            // Ignore if focus is in text input
+            if is_text_input_keyboard(&ev) {
+                return;
+            }
+
+            match (ctrl, key.as_str()) {
+                (true, "c") => {
+                    // Copy selection to clipboard
+                    ev.prevent_default();
+                    let selected = selected_node_ids.get();
+                    if selected.is_empty() {
+                        return;
+                    }
+                    let nodes_snapshot = nodes.get();
+                    let conns_snapshot = connections.get();
+                    let selection = SavedSelection {
+                        id: generate_id(),
+                        name: "Selection".to_string(),
+                        created_at: js_sys::Date::now(),
+                        nodes: nodes_snapshot.into_iter().filter(|n| selected.contains(&n.id)).collect(),
+                        connections: conns_snapshot.into_iter().filter(|c| selected.contains(&c.source_node_id) && selected.contains(&c.target_node_id)).collect(),
+                    };
+                    let add_toast_clone = add_toast.clone();
+                    spawn_local(async move {
+                        match copy_to_clipboard(selection, true).await {
+                            Ok(_) => add_toast_clone("Copied to clipboard".to_string(), ToastType::Success),
+                            Err(e) => add_toast_clone(format!("Copy failed: {}", e), ToastType::Error),
+                        }
+                    });
+                }
+                (true, "v") => {
+                    // Paste from clipboard
+                    ev.prevent_default();
+                    let add_toast_clone = add_toast.clone();
+                    let mut set_nodes_clone = set_nodes.clone();
+                    let mut set_connections_clone = set_connections.clone();
+                    let mut set_next_node_id_clone = set_next_node_id.clone();
+                    let mut set_next_connection_id_clone = set_next_connection_id.clone();
+                    spawn_local(async move {
+                        match paste_from_clipboard().await {
+                            Ok(selection) => {
+                                let (new_nodes, new_conns, next_id, next_conn) = load_selection(
+                                    selection,
+                                    next_node_id.get(),
+                                    next_connection_id.get(),
+                                );
+                                set_nodes_clone.update(|n| n.extend(new_nodes));
+                                set_connections_clone.update(|c| c.extend(new_conns));
+                                set_next_node_id_clone.set(next_id);
+                                set_next_connection_id_clone.set(next_conn);
+                                add_toast_clone("Pasted from clipboard".to_string(), ToastType::Success);
+                            }
+                            Err(e) => add_toast_clone(format!("Paste failed: {}", e), ToastType::Error),
+                        }
+                    });
+                }
+                (true, "s") => {
+                    // Save selection
+                    ev.prevent_default();
+                    if selected_node_ids.get().is_empty() {
+                        add_toast("No selection to save".to_string(), ToastType::Info);
+                        return;
+                    }
+                    let selected = selected_node_ids.get();
+                    let nodes_snapshot = nodes.get();
+                    let conns_snapshot = connections.get();
+                    let selection = SavedSelection {
+                        id: generate_id(),
+                        name: "Selection".to_string(),
+                        created_at: js_sys::Date::now(),
+                        nodes: nodes_snapshot.into_iter().filter(|n| selected.contains(&n.id)).collect(),
+                        connections: conns_snapshot.into_iter().filter(|c| selected.contains(&c.source_node_id) && selected.contains(&c.target_node_id)).collect(),
+                    };
+                    let mut selections = saved_selections.get();
+                    selections.push(selection.clone());
+                    save_saved_selections_to_storage(&selections);
+                    set_saved_selections.set(selections);
+                    add_toast("Selection saved".to_string(), ToastType::Success);
+                }
+                (true, "a") => {
+                    // Select all
+                    ev.prevent_default();
+                    let all_ids: HashSet<u32> = nodes.get().iter().map(|n| n.id).collect();
+                    set_selected_node_ids.set(all_ids);
+                }
+                (_, "Delete") | (_, "Backspace") => {
+                    // Delete selected nodes
+                    ev.prevent_default();
+                    let to_delete = selected_node_ids.get();
+                    if to_delete.is_empty() { return; }
+                    // Animate and delete
+                    if let Some(first_id) = to_delete.iter().next().copied() {
+                        set_deleting_node_id.set(Some(first_id));
+                    }
+                    let to_delete_clone = to_delete.clone();
+                    let mut set_nodes_clone = set_nodes.clone();
+                    let mut set_connections_clone = set_connections.clone();
+                    let mut set_deleting_node_id_clone = set_deleting_node_id.clone();
+                    let mut set_selected_node_ids_clone = set_selected_node_ids.clone();
+                    spawn_local(async move {
+                        TimeoutFuture::new(300).await;
+                        set_nodes_clone.update(|n| n.retain(|node| !to_delete_clone.contains(&node.id)));
+                        set_connections_clone.update(|c| c.retain(|conn|
+                            !to_delete_clone.contains(&conn.source_node_id) && !to_delete_clone.contains(&conn.target_node_id)
+                        ));
+                        set_deleting_node_id_clone.set(None);
+                        set_selected_node_ids_clone.update(|ids| ids.clear());
+                    });
+                }
+                (_, "Escape") => {
+                    // Clear selection
+                    set_selected_node_ids.update(|ids| ids.clear());
+                    if let Some(callback) = on_selection_change {
+                        callback.run(None);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }) as Box<dyn Fn(_)>);
+
+    KEYDOWN_LISTENER_ADDED.call_once(|| {
+        if let Some(w) = web_sys::window() {
+            let _ = w.add_event_listener_with_callback("keydown", keydown_closure.as_ref().unchecked_ref());
+        }
+    });
+    keydown_closure.forget();
 
     /// Execute nodes in topological order (BFS from trigger), collecting upstream results
     fn execute_downstream_order(
@@ -643,6 +821,11 @@ pub fn AppLayout() -> impl IntoView {
                     None
                 }
             }}
+
+            {/* Toast notifications */}
+            <ToastContainer toasts={toasts.into()} on_dismiss={Callback::new(move |id| {
+                set_toasts.update(|t| t.retain(|toast| toast.id != id));
+            })} />
         </div>
     }
 }
