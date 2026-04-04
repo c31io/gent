@@ -701,7 +701,6 @@ pub fn AppLayout() -> impl IntoView {
     view! {
         <div
             class="app-layout"
-            tabindex="0"
             on:mousemove={handle_global_mousemove}
             on:mouseup={handle_mouse_up}
             on:mouseleave={handle_mouse_up}
