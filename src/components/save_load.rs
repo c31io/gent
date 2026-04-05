@@ -1,4 +1,7 @@
 use std::collections::HashMap;
+use wasm_bindgen::closure::Closure;
+use wasm_bindgen::JsCast;
+use wasm_bindgen_futures::JsFuture;
 use crate::components::canvas::state::{NodeState, ConnectionState, SavedSelection};
 
 const STORAGE_KEY: &str = "gent_saved_selections";
@@ -95,6 +98,41 @@ pub fn load_selection(
     (new_nodes, new_conns, current_node_id, current_conn_id)
 }
 
+/// Export a saved selection to a downloadable JSON file
+pub async fn export_to_file(selection: &SavedSelection, default_name: &str) -> Result<(), String> {
+    let json = serde_json::to_string_pretty(selection)
+        .map_err(|e| format!("serialization failed: {}", e))?;
+
+    let window = web_sys::window().ok_or("window not available")?;
+
+    let blob = web_sys::Blob::new_with_str_sequence(
+        &js_sys::Array::of1(&json.into()),
+    ).map_err(|e| format!("blob creation failed: {:?}", e))?;
+
+    let url = web_sys::Url::create_object_url_with_blob(&blob)
+        .map_err(|e| format!("URL creation failed: {:?}", e))?;
+
+    let document = window.document().ok_or("document not available")?;
+    let body = document.body().ok_or("body not available")?;
+
+    let anchor: web_sys::HtmlAnchorElement = document.create_element("a")
+        .map_err(|e| format!("anchor creation failed: {:?}", e))?
+        .dyn_into()
+        .map_err(|_| "could not cast to HtmlAnchorElement")?;
+    anchor.set_href(&url);
+    anchor.set_download(default_name);
+
+    body.append_child(&anchor)
+        .map_err(|e| format!("append child failed: {:?}", e))?;
+    anchor.click();
+    let _ = body.remove_child(&anchor);
+
+    web_sys::Url::revoke_object_url(&url)
+        .map_err(|e| format!("revoke URL failed: {:?}", e))?;
+
+    Ok(())
+}
+
 /// Copy selection to clipboard as JSON
 pub async fn copy_to_clipboard(selection: SavedSelection, strip: bool) -> Result<(), String> {
     let mut selection = selection;
@@ -121,4 +159,70 @@ pub async fn paste_from_clipboard() -> Result<SavedSelection, String> {
     let text_str = text.as_string().ok_or("clipboard text was not a string")?;
     serde_json::from_str(&text_str)
         .map_err(|e| format!("parse failed: {}", e))
+}
+
+/// Import a SavedSelection from a JSON file via browser file picker
+/// Returns the parsed selection and its name (derived from filename)
+pub async fn import_from_file() -> Result<(SavedSelection, String), String> {
+    let window = web_sys::window().ok_or("window not available")?;
+    let document = window.document().ok_or("document not available")?;
+    let body = document.body().ok_or("body not available")?;
+
+    let input: web_sys::HtmlInputElement = document.create_element("input")
+        .map_err(|e| format!("input creation failed: {:?}", e))?
+        .dyn_into()
+        .map_err(|_| "could not cast to HtmlInputElement")?;
+    input.set_attribute("type", "file").map_err(|e| format!("{:?}", e))?;
+    input.set_attribute("accept", ".json").map_err(|e| format!("{:?}", e))?;
+
+    let style = input.style();
+    style.set_property("display", "none").map_err(|e| format!("{:?}", e))?;
+
+    body.append_child(&input).map_err(|e| format!("{:?}", e))?;
+
+    input.click();
+
+    let file_promise = js_sys::Promise::new(&mut |resolve, reject| {
+        let input_for_listener = input.clone();
+        let input_for_closure = input.clone();
+        let closure = Closure::wrap(Box::new(move |_ev: web_sys::Event| {
+            if let Some(files) = input_for_closure.files() {
+                if files.length() > 0 {
+                    if let Some(file) = files.get(0) {
+                        let _ = resolve.call1(&resolve, &file);
+                        return;
+                    }
+                }
+            }
+            let _ = reject.call1(&reject, &"No file selected".into());
+        }) as Box<dyn FnMut(_)>);
+        input_for_listener.add_event_listener_with_callback("change", closure.as_ref().unchecked_ref()).unwrap();
+        closure.forget();
+    });
+
+    let file: web_sys::File = JsFuture::from(file_promise)
+        .await
+        .map_err(|e| format!("file selection failed: {:?}", e))?
+        .dyn_into()
+        .map_err(|_| "could not cast to File")?;
+
+    let reader = web_sys::FileReader::new()
+        .map_err(|e| format!("FileReader creation failed: {:?}", e))?;
+    reader.read_as_text(&file)
+        .map_err(|e| format!("read_as_text failed: {:?}", e))?;
+
+    let result = reader.result()
+        .map_err(|e| format!("result failed: {:?}", e))?;
+    let text = result.as_string()
+        .ok_or("result was not a string")?;
+
+    let _ = body.remove_child(&input);
+
+    let selection: SavedSelection = serde_json::from_str(&text)
+        .map_err(|e| format!("parse failed: {}", e))?;
+    let name = file.name()
+        .replace(".json", "")
+        .replace("_", " ");
+
+    Ok((selection, name))
 }

@@ -13,7 +13,7 @@ use crate::components::left_panel::{LeftPanel, NODE_TYPES};
 use crate::components::graph_section::GraphSection;
 use crate::components::right_panel::RightPanel;
 use crate::components::node_inspector::NodeInspector;
-use crate::components::save_load::{copy_to_clipboard, paste_from_clipboard, load_selection, save_saved_selections_to_storage, generate_id};
+use crate::components::save_load::{copy_to_clipboard, paste_from_clipboard, load_selection, save_saved_selections_to_storage, generate_id, export_to_file, import_from_file};
 use crate::components::toast::{ToastContainer, Toast, ToastType};
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -294,6 +294,59 @@ pub fn AppLayout() -> impl IntoView {
                     save_saved_selections_to_storage(&selections);
                     set_saved_selections.set(selections);
                     add_toast("Selection saved".to_string(), ToastType::Success);
+                }
+                (true, "e") => {
+                    // Export selection to file
+                    ev.prevent_default();
+                    if selected_node_ids.get().is_empty() {
+                        add_toast("No selection to export".to_string(), ToastType::Info);
+                        return;
+                    }
+                    let selected = selected_node_ids.get();
+                    let nodes_snapshot = nodes.get();
+                    let conns_snapshot = connections.get();
+                    let selection = SavedSelection {
+                        id: generate_id(),
+                        name: "Selection".to_string(),
+                        created_at: js_sys::Date::now(),
+                        nodes: nodes_snapshot.into_iter().filter(|n| selected.contains(&n.id)).collect(),
+                        connections: conns_snapshot.into_iter().filter(|c| selected.contains(&c.source_node_id) && selected.contains(&c.target_node_id)).collect(),
+                    };
+                    let filename = format!("{}.json", selection.name.to_lowercase().replace(" ", "_"));
+                    let add_toast_clone = add_toast.clone();
+                    spawn_local(async move {
+                        match export_to_file(&selection, &filename).await {
+                            Ok(_) => add_toast_clone("Exported to file".to_string(), ToastType::Success),
+                            Err(e) => add_toast_clone(format!("Export failed: {}", e), ToastType::Error),
+                        }
+                    });
+                }
+                (true, "i") => {
+                    // Import from file
+                    ev.prevent_default();
+                    let add_toast_clone = add_toast.clone();
+                    let set_nodes_clone = set_nodes.clone();
+                    let set_connections_clone = set_connections.clone();
+                    let set_next_node_id_clone = set_next_node_id.clone();
+                    let set_next_connection_id_clone = set_next_connection_id.clone();
+                    spawn_local(async move {
+                        match import_from_file().await {
+                            Ok((selection, _name)) => {
+                                // Generate new IDs and remap
+                                let (new_nodes, new_conns, next_id, next_conn) = load_selection(
+                                    selection,
+                                    next_node_id.get(),
+                                    next_connection_id.get(),
+                                );
+                                set_nodes_clone.update(|n| n.extend(new_nodes));
+                                set_connections_clone.update(|c| c.extend(new_conns));
+                                set_next_node_id_clone.set(next_id);
+                                set_next_connection_id_clone.set(next_conn);
+                                add_toast_clone("Imported from file".to_string(), ToastType::Success);
+                            }
+                            Err(e) => add_toast_clone(format!("Import failed: {}", e), ToastType::Error),
+                        }
+                    });
                 }
                 (true, "a") => {
                     // Select all

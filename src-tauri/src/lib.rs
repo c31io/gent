@@ -62,6 +62,7 @@ async fn export_graph(path: String, json: String) -> Result<(), String> {
         .map_err(|e| format!("failed to write file: {}", e))
 }
 
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize Rune engine singleton
