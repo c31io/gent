@@ -268,7 +268,7 @@ pub fn Canvas(
                     return;
                 }
 
-                let is_shift = is_shift_down();
+                let is_shift = ev.shift_key();
 
                 if is_shift {
                     // Shift+click: toggle node in selection
@@ -303,7 +303,7 @@ pub fn Canvas(
                 }
             } else {
                 // Clicked on empty canvas
-                if is_shift_down() {
+                if ev.shift_key() {
                     // Start rubber-band selection
                     let canvas_offset_x = get_canvas_offset_x();
                     let canvas_offset_y = 0.0;
