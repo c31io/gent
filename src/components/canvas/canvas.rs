@@ -290,16 +290,19 @@ pub fn Canvas(
                     callback.run(Some(node_id));
                 }
 
-                // Start dragging if node is selected
-                let selected_ids = selected_node_ids.get();
-                if selected_ids.contains(&node_id) {
-                    if let Some(node) = nodes.get().iter().find(|n| n.id == node_id) {
-                        set_drag_offset_x.set(canvas_x - node.x);
-                        set_drag_offset_y.set(canvas_y - node.y);
+                // Start dragging if node is selected AND shift is not held
+                // (when shift is held, we only toggle selection, don't drag)
+                if !ev.shift_key() {
+                    let selected_ids = selected_node_ids.get();
+                    if selected_ids.contains(&node_id) {
+                        if let Some(node) = nodes.get().iter().find(|n| n.id == node_id) {
+                            set_drag_offset_x.set(canvas_x - node.x);
+                            set_drag_offset_y.set(canvas_y - node.y);
+                        }
+                        set_dragging_node_id.set(Some(node_id));
+                        set_is_panning.set(false);
+                        return;
                     }
-                    set_dragging_node_id.set(Some(node_id));
-                    set_is_panning.set(false);
-                    return;
                 }
             } else {
                 // Clicked on empty canvas
