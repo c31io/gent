@@ -248,6 +248,21 @@ pub fn Canvas(
 
     // Pan handling
     let handle_mouse_down = move |ev: web_sys::MouseEvent| {
+        // Right-click to pan canvas
+        if ev.button() == 2 {
+            if let Some(dc) = dragging_connection.get() {
+                if dc.is_dragging {
+                    set_dragging_connection.set(None);
+                    return;
+                }
+            }
+            set_is_panning.set(true);
+            set_last_mouse_x.set(ev.client_x() as f64);
+            set_last_mouse_y.set(ev.client_y() as f64);
+            return;
+        }
+
+        // Left-click handling
         if ev.button() == 0 {
             if is_port(&ev) {
                 return;
@@ -319,23 +334,13 @@ pub fn Canvas(
                     set_is_selecting.set(true);
                     set_selection_box.set(Some((canvas_x, canvas_y, canvas_x, canvas_y)));
                 } else {
-                    // Clear selection
+                    // Clear selection - NO panning for left-click on empty canvas
                     set_selected_node_ids.update(|ids| ids.clear());
                     if let Some(callback) = on_selection_change {
                         callback.run(None);
                     }
                 }
             }
-
-            if let Some(dc) = dragging_connection.get() {
-                if dc.is_dragging {
-                    set_dragging_connection.set(None);
-                    return;
-                }
-            }
-            set_is_panning.set(true);
-            set_last_mouse_x.set(ev.client_x() as f64);
-            set_last_mouse_y.set(ev.client_y() as f64);
         }
     };
 
