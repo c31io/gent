@@ -320,26 +320,18 @@ pub fn Canvas(
                     }
                 }
             } else {
-                // Clicked on empty canvas
-                if ev.shift_key() {
-                    // Start rubber-band selection
-                    let canvas_offset_x = get_canvas_offset_x();
-                    let canvas_offset_y = 0.0;
-                    let pan = pan_x.get();
-                    let pan_y_val = pan_y.get();
-                    let zoom_val = zoom.get();
-                    let canvas_x = (ev.client_x() as f64 - canvas_offset_x - pan) / zoom_val;
-                    let canvas_y = (ev.client_y() as f64 - canvas_offset_y - pan_y_val) / zoom_val;
-                    set_selection_drag_start.set(Some((canvas_x, canvas_y)));
-                    set_is_selecting.set(true);
-                    set_selection_box.set(Some((canvas_x, canvas_y, canvas_x, canvas_y)));
-                } else {
-                    // Clear selection - NO panning for left-click on empty canvas
-                    set_selected_node_ids.update(|ids| ids.clear());
-                    if let Some(callback) = on_selection_change {
-                        callback.run(None);
-                    }
-                }
+                // Clicked on empty canvas - start rubber-band selection (no shift needed)
+                web_sys::console::log_1(&"Starting rubber-band".into());
+                let canvas_offset_x = get_canvas_offset_x();
+                let canvas_offset_y = 0.0;
+                let pan = pan_x.get();
+                let pan_y_val = pan_y.get();
+                let zoom_val = zoom.get();
+                let canvas_x = (ev.client_x() as f64 - canvas_offset_x - pan) / zoom_val;
+                let canvas_y = (ev.client_y() as f64 - canvas_offset_y - pan_y_val) / zoom_val;
+                set_selection_drag_start.set(Some((canvas_x, canvas_y)));
+                set_is_selecting.set(true);
+                set_selection_box.set(Some((canvas_x, canvas_y, canvas_x, canvas_y)));
             }
         }
     };
@@ -718,6 +710,7 @@ pub fn Canvas(
             on:mouseleave={handle_mouse_up}
             on:wheel={handle_wheel}
             on:dblclick={handle_canvas_dblclick}
+            on:contextmenu={|ev| ev.prevent_default()}
         >
             <canvas
                 id="wires-canvas"
