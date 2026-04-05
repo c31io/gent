@@ -723,6 +723,31 @@ pub fn Canvas(
                 style:z_index="0"
             ></canvas>
 
+            {/* Rubber-band selection box */}
+            {move || {
+                if let Some((start_x, start_y, end_x, end_y)) = selection_box.get() {
+                    let zoom_val = zoom.get();
+                    let pan_val = pan_x.get();
+                    let pan_y_val = pan_y.get();
+                    // Convert canvas coords to screen coords
+                    let screen_x = start_x.min(end_x) * zoom_val + pan_val;
+                    let screen_y = start_y.min(end_y) * zoom_val + pan_y_val;
+                    let screen_w = (end_x - start_x).abs() * zoom_val;
+                    let screen_h = (end_y - start_y).abs() * zoom_val;
+                    view! {
+                        <div
+                            class="selection-box"
+                            style:left={format!("{}px", screen_x)}
+                            style:top={format!("{}px", screen_y)}
+                            style:width={format!("{}px", screen_w)}
+                            style:height={format!("{}px", screen_h)}
+                        ></div>
+                    }.into_any()
+                } else {
+                    view! { <div></div> }.into_any()
+                }
+            }}
+
             <div
                 class="canvas"
                 style:transform={transform_style}
