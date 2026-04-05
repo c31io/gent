@@ -1,12 +1,12 @@
 /// Direction for a port
-#[derive(Clone, Debug, PartialEq, Hash)]
+#[derive(Clone, Debug, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum PortDirection {
     In,
     Out,
 }
 
 /// Type of data flowing through a port
-#[derive(Clone, Debug, PartialEq, Hash)]
+#[derive(Clone, Debug, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum PortType {
     Text,       // blue #3b82f6
     Image,      // green #22c55e
@@ -17,7 +17,7 @@ pub enum PortType {
 }
 
 /// Model node configuration
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ModelConfig {
     pub format: String,       // "openai" | "anthropic"
     pub model_name: String,  // e.g., "gpt-4o-mini", "claude-3-5-sonnet-latest"
@@ -26,7 +26,7 @@ pub struct ModelConfig {
 }
 
 /// A port on a node with rendering offset calculated
-#[derive(Clone, Debug, Hash)]
+#[derive(Clone, Debug, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Port {
     pub name: String,
     pub port_type: PortType,
@@ -41,7 +41,7 @@ pub struct PortWithOffset {
 }
 
 /// Variants for different node types with their specific data
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum NodeVariant {
     UserInput { text: String },
     FileInput { path: String },
@@ -67,7 +67,7 @@ pub enum NodeVariant {
 }
 
 /// Execution status of a node
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum NodeStatus {
     Pending,
     Running,
@@ -77,7 +77,7 @@ pub enum NodeStatus {
 }
 
 /// Minimal node state for rendering
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct NodeState {
     pub id: u32,
     pub x: f64,
@@ -91,7 +91,7 @@ pub struct NodeState {
 }
 
 /// Represents a persistent wire connection between two nodes
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ConnectionState {
     pub id: u32,
     pub source_node_id: u32,
@@ -297,4 +297,24 @@ pub fn default_variant_for_type(node_type: &str) -> NodeVariant {
         },
         _ => NodeVariant::Trigger,
     }
+}
+
+/// A saved selection of nodes and connections for reuse
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct SavedSelection {
+    pub id: String,           // UUID
+    pub name: String,         // User-provided name
+    pub created_at: f64,      // js_sys::Date::now() timestamp
+    pub nodes: Vec<NodeState>, // Full node data
+    pub connections: Vec<ConnectionState>,
+}
+
+/// Bundled pre-made group template
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct BundledGroup {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub description: &'static str,
+    pub nodes: Vec<NodeState>,
+    pub connections: Vec<ConnectionState>,
 }

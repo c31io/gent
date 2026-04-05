@@ -1,11 +1,21 @@
 use leptos::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use wasm_bindgen::JsCast;
 
 use crate::components::canvas::geometry::{find_input_port_at, get_node_id_from_event, is_port, is_text_input, is_trigger_button};
 use crate::components::canvas::state::{ConnectionState, DraggingConnection, NodeState, Port, PortDirection, PortType, get_output_ports, compute_port_offsets, get_port_canvas_position};
 use crate::components::canvas::wires::draw_connections;
 use crate::components::nodes::node::GraphNode;
+
+/// Check if shift key is currently pressed
+fn is_shift_down() -> bool {
+    if let Some(window) = web_sys::window() {
+        if let Ok(val) = js_sys::Reflect::get(&window, &"Shift".into()) {
+            return val.as_bool().unwrap_or(false);
+        }
+    }
+    false
+}
 
 /// Check if two ports are compatible for connection
 fn ports_compatible(source: &Port, target: &Port) -> bool {
@@ -20,9 +30,9 @@ fn ports_compatible(source: &Port, target: &Port) -> bool {
 /// Canvas for rendering nodes with pan/zoom
 #[component]
 pub fn Canvas(
-    /// Selected node ID
-    selected_node_id: Signal<Option<u32>>,
-    set_selected_node_id: WriteSignal<Option<u32>>,
+    /// Selected node IDs
+    selected_node_ids: Signal<HashSet<u32>>,
+    set_selected_node_ids: WriteSignal<HashSet<u32>>,
     /// All nodes
     nodes: Signal<Vec<NodeState>>,
     set_nodes: WriteSignal<Vec<NodeState>>,
@@ -61,11 +71,17 @@ pub fn Canvas(
     let (dragging_node_id, set_dragging_node_id) = signal(Option::<u32>::None);
     let (drag_offset_x, set_drag_offset_x) = signal(0.0f64);
     let (drag_offset_y, set_drag_offset_y) = signal(0.0f64);
+    let (drag_initial_positions, set_drag_initial_positions) = signal(HashMap::<u32, (f64, f64)>::new()); // node_id -> (initial_x, initial_y)
 
     // Connection state (local to canvas - wires are drawn here)
     let (dragging_connection, set_dragging_connection) = signal(Option::<DraggingConnection>::None);
     let (rerouting_from, set_rerouting_from) = signal(Option::<u32>::None);
     let (next_connection_id, set_next_connection_id) = signal(1u32);
+
+    // Rubber-band selection state
+    let (is_selecting, set_is_selecting) = signal(false);
+    let (selection_box, set_selection_box) = signal(Option::<(f64, f64, f64, f64)>::None); // (start_x, start_y, end_x, end_y)
+    let (selection_drag_start, set_selection_drag_start) = signal(Option::<(f64, f64)>::None); // canvas coords of mousedown
 
     // Get canvas offset (left panel width + divider width)
     let get_canvas_offset_x = move || -> f64 {
@@ -233,6 +249,21 @@ pub fn Canvas(
 
     // Pan handling
     let handle_mouse_down = move |ev: web_sys::MouseEvent| {
+        // Right-click to pan canvas
+        if ev.button() == 2 {
+            if let Some(dc) = dragging_connection.get() {
+                if dc.is_dragging {
+                    set_dragging_connection.set(None);
+                    return;
+                }
+            }
+            set_is_panning.set(true);
+            set_last_mouse_x.set(ev.client_x() as f64);
+            set_last_mouse_y.set(ev.client_y() as f64);
+            return;
+        }
+
+        // Left-click handling
         if ev.button() == 0 {
             if is_port(&ev) {
                 return;
@@ -253,40 +284,85 @@ pub fn Canvas(
                     return;
                 }
 
-                set_selected_node_id.set(Some(node_id));
+                let is_shift = ev.shift_key();
+                let already_selected = selected_node_ids.get().contains(&node_id);
+
+                if is_shift {
+                    // Shift+click: toggle node in selection
+                    set_selected_node_ids.update(|ids| {
+                        if ids.contains(&node_id) {
+                            ids.remove(&node_id);
+                        } else {
+                            ids.insert(node_id);
+                        }
+                    });
+                } else if already_selected {
+                    // Already selected - keep multi-selection intact
+                } else {
+                    // Normal click: replace selection with this node
+                    set_selected_node_ids.update(|ids| {
+                        ids.clear();
+                        ids.insert(node_id);
+                    });
+                }
                 if let Some(callback) = on_selection_change {
                     callback.run(Some(node_id));
                 }
 
-                let nodes_snapshot = nodes.get();
-                if let Some(node) = nodes_snapshot.iter().find(|n| n.id == node_id) {
-                    set_drag_offset_x.set(canvas_x - node.x);
-                    set_drag_offset_y.set(canvas_y - node.y);
-                    set_dragging_node_id.set(Some(node_id));
-                    set_is_panning.set(false);
-                    return;
+                // Start dragging if node is selected AND shift is not held
+                // (when shift is held, we only toggle selection, don't drag)
+                if !ev.shift_key() {
+                    let selected_ids = selected_node_ids.get();
+                    if selected_ids.contains(&node_id) {
+                        if let Some(node) = nodes.get().iter().find(|n| n.id == node_id) {
+                            set_drag_offset_x.set(canvas_x - node.x);
+                            set_drag_offset_y.set(canvas_y - node.y);
+                        }
+                        // Store initial positions of all selected nodes for multi-node drag
+                        let initial_positions: HashMap<u32, (f64, f64)> = nodes.get()
+                            .iter()
+                            .filter(|n| selected_ids.contains(&n.id))
+                            .map(|n| (n.id, (n.x, n.y)))
+                            .collect();
+                        set_drag_initial_positions.set(initial_positions);
+                        set_dragging_node_id.set(Some(node_id));
+                        set_is_panning.set(false);
+                        return;
+                    }
                 }
             } else {
-                set_selected_node_id.set(None);
-                if let Some(callback) = on_selection_change {
-                    callback.run(None);
-                }
+                // Clicked on empty canvas - start rubber-band selection (no shift needed)
+                let canvas_offset_x = get_canvas_offset_x();
+                let canvas_offset_y = 0.0;
+                let pan = pan_x.get();
+                let pan_y_val = pan_y.get();
+                let zoom_val = zoom.get();
+                let canvas_x = (ev.client_x() as f64 - canvas_offset_x - pan) / zoom_val;
+                let canvas_y = (ev.client_y() as f64 - canvas_offset_y - pan_y_val) / zoom_val;
+                set_selection_drag_start.set(Some((canvas_x, canvas_y)));
+                set_is_selecting.set(true);
+                set_selection_box.set(Some((canvas_x, canvas_y, canvas_x, canvas_y)));
             }
-
-            if let Some(dc) = dragging_connection.get() {
-                if dc.is_dragging {
-                    set_dragging_connection.set(None);
-                    return;
-                }
-            }
-            set_is_panning.set(true);
-            set_last_mouse_x.set(ev.client_x() as f64);
-            set_last_mouse_y.set(ev.client_y() as f64);
         }
     };
 
     let handle_mouse_move = move |ev: web_sys::MouseEvent| {
-        if let Some(node_id) = dragging_node_id.get() {
+        // Handle rubber-band selection
+        if is_selecting.get() {
+            if let Some((start_x, start_y)) = selection_drag_start.get() {
+                let canvas_offset_x = get_canvas_offset_x();
+                let canvas_offset_y = 0.0;
+                let pan = pan_x.get();
+                let pan_y_val = pan_y.get();
+                let zoom_val = zoom.get();
+                let canvas_x = (ev.client_x() as f64 - canvas_offset_x - pan) / zoom_val;
+                let canvas_y = (ev.client_y() as f64 - canvas_offset_y - pan_y_val) / zoom_val;
+                set_selection_box.set(Some((start_x, start_y, canvas_x, canvas_y)));
+            }
+        }
+
+        // Handle node dragging (move all selected nodes)
+        if let Some(_node_id) = dragging_node_id.get() {
             let canvas_offset_x = get_canvas_offset_x();
             let canvas_offset_y = 0.0;
             let pan = pan_x.get();
@@ -296,15 +372,34 @@ pub fn Canvas(
             let canvas_x = (ev.client_x() as f64 - canvas_offset_x - pan) / zoom_val;
             let canvas_y = (ev.client_y() as f64 - canvas_offset_y - pan_y_val) / zoom_val;
 
-            let new_x = canvas_x - drag_offset_x.get();
-            let new_y = canvas_y - drag_offset_y.get();
+            let selected_ids = selected_node_ids.get();
+            let drag_offset_x = drag_offset_x.get();
+            let drag_offset_y = drag_offset_y.get();
+            let initial_positions = drag_initial_positions.get();
 
-            set_nodes.update(|nodes: &mut Vec<NodeState>| {
-                if let Some(node) = nodes.iter_mut().find(|n| n.id == node_id) {
-                    node.x = new_x;
-                    node.y = new_y;
+            // Calculate the position where the clicked node should be now
+            let clicked_node_new_x = canvas_x - drag_offset_x;
+            let clicked_node_new_y = canvas_y - drag_offset_y;
+
+            // Find the clicked node's initial position to calculate delta
+            if let Some(dragging_id) = dragging_node_id.get() {
+                if let Some((init_x, init_y)) = initial_positions.get(&dragging_id) {
+                    let delta_x = clicked_node_new_x - init_x;
+                    let delta_y = clicked_node_new_y - init_y;
+
+                    // Move all selected nodes by the same delta, preserving their relative positions
+                    set_nodes.update(|nodes: &mut Vec<NodeState>| {
+                        for node in nodes.iter_mut() {
+                            if selected_ids.contains(&node.id) {
+                                if let Some((orig_x, orig_y)) = initial_positions.get(&node.id) {
+                                    node.x = orig_x + delta_x;
+                                    node.y = orig_y + delta_y;
+                                }
+                            }
+                        }
+                    });
                 }
-            });
+            }
             return;
         }
 
@@ -368,6 +463,30 @@ pub fn Canvas(
     let handle_mouse_up = move |ev: web_sys::MouseEvent| {
         set_dragging_node_id.set(None);
         set_is_panning.set(false);
+
+        // Complete rubber-band selection
+        if is_selecting.get() {
+            set_is_selecting.set(false);
+            if let Some((start_x, start_y, end_x, end_y)) = selection_box.get() {
+                let min_x = start_x.min(end_x);
+                let max_x = start_x.max(end_x);
+                let min_y = start_y.min(end_y);
+                let max_y = start_y.max(end_y);
+                let node_width = 160.0;
+                let node_height = 100.0;
+                let selected: HashSet<u32> = nodes.get().iter()
+                    .filter(|n| {
+                        // Partial coverage: any part of node overlapping selection box
+                        n.x + node_width >= min_x && n.x <= max_x &&
+                        n.y + node_height >= min_y && n.y <= max_y
+                    })
+                    .map(|n| n.id)
+                    .collect();
+                set_selected_node_ids.set(selected);
+                set_selection_box.set(None);
+                set_selection_drag_start.set(None);
+            }
+        }
 
         // Check if a palette node is being dropped
         if let Some(callback) = &on_node_drop {
@@ -603,6 +722,7 @@ pub fn Canvas(
             on:mouseleave={handle_mouse_up}
             on:wheel={handle_wheel}
             on:dblclick={handle_canvas_dblclick}
+            on:contextmenu={|ev| ev.prevent_default()}
         >
             <canvas
                 id="wires-canvas"
@@ -615,17 +735,42 @@ pub fn Canvas(
                 style:z_index="0"
             ></canvas>
 
+            {/* Rubber-band selection box */}
+            {move || {
+                if let Some((start_x, start_y, end_x, end_y)) = selection_box.get() {
+                    let zoom_val = zoom.get();
+                    let pan_val = pan_x.get();
+                    let pan_y_val = pan_y.get();
+                    // Convert canvas coords to screen coords
+                    let screen_x = start_x.min(end_x) * zoom_val + pan_val;
+                    let screen_y = start_y.min(end_y) * zoom_val + pan_y_val;
+                    let screen_w = (end_x - start_x).abs() * zoom_val;
+                    let screen_h = (end_y - start_y).abs() * zoom_val;
+                    view! {
+                        <div
+                            class="selection-box"
+                            style:left={format!("{}px", screen_x)}
+                            style:top={format!("{}px", screen_y)}
+                            style:width={format!("{}px", screen_w)}
+                            style:height={format!("{}px", screen_h)}
+                        ></div>
+                    }.into_any()
+                } else {
+                    view! { <div></div> }.into_any()
+                }
+            }}
+
             <div
                 class="canvas"
                 style:transform={transform_style}
             >
                 {move || {
                     let connections_snapshot = connections.get();
-                    let selected = selected_node_id.get();
+                    let selected_ids = selected_node_ids.get();
                     let deleting = deleting_node_id.and_then(|s| s.get());
                     nodes.get().iter().map(|node| {
                         let has_connection = connections_snapshot.iter().any(|c| c.target_node_id == node.id);
-                        let is_selected = selected == Some(node.id);
+                        let is_selected = selected_ids.contains(&node.id);
                         let is_deleting = deleting == Some(node.id);
                         // Get input ports from node.ports (static), output ports from get_output_ports (dynamic)
                         let input_ports = node.ports.iter().filter(|p| p.direction == PortDirection::In).cloned().collect::<Vec<_>>();

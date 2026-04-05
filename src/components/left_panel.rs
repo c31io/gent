@@ -1,9 +1,12 @@
 use leptos::prelude::*;
+use crate::components::canvas::state::{SavedSelection, BundledGroup};
+use crate::components::graph_section::GraphSection;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Tab {
     Palette,
     Plugins,
+    Graph,
 }
 
 impl Default for Tab {
@@ -158,6 +161,12 @@ fn TabBar(active_tab: ReadSignal<Tab>, set_active_tab: WriteSignal<Tab>) -> impl
             >
                 "Plugins"
             </button>
+            <button
+                class=move || format!("tab{}", if active_tab.get() == Tab::Graph { " tab-active" } else { "" })
+                on:click={move |_| set_active_tab.set(Tab::Graph)}
+            >
+                "Graph"
+            </button>
         </div>
     }
 }
@@ -166,15 +175,36 @@ fn TabBar(active_tab: ReadSignal<Tab>, set_active_tab: WriteSignal<Tab>) -> impl
 pub fn LeftPanel(
     /// Callback when drag starts from palette
     #[prop(default = None)] on_drag_start: Option<Callback<String>>,
+    /// Saved selections signal (ReadSignal<Vec<SavedSelection>>)
+    saved_selections: Signal<Vec<SavedSelection>>,
+    /// Callback when a saved selection is loaded
+    on_load_selection: Callback<SavedSelection>,
+    /// Callback when a saved selection is deleted
+    on_delete_selection: Callback<String>,
 ) -> impl IntoView {
     let (active_tab, set_active_tab) = signal(Tab::default());
+
+    // Default no-op callback for bundle loading (not yet implemented)
+    let default_on_load_bundle = Callback::new(|_: BundledGroup| {});
 
     view! {
         <>
             <TabBar active_tab={active_tab.into()} set_active_tab={set_active_tab} />
             {move || match active_tab.get() {
-                Tab::Palette => view! { <NodePalette on_drag_start={on_drag_start} /> }.into_any(),
+                Tab::Palette => view! {
+                    <NodePalette on_drag_start={on_drag_start} />
+                }.into_any(),
                 Tab::Plugins => view! { <crate::components::plugin_manager::PluginManager /> }.into_any(),
+                Tab::Graph => view! {
+                    <div class="panel-content">
+                        <GraphSection
+                            saved_selections={saved_selections}
+                            on_load_selection={on_load_selection}
+                            on_delete_selection={on_delete_selection}
+                            on_load_bundle={default_on_load_bundle}
+                        />
+                    </div>
+                }.into_any(),
             }}
         </>
     }
