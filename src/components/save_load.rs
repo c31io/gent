@@ -208,11 +208,27 @@ pub async fn import_from_file() -> Result<(SavedSelection, String), String> {
 
     let reader = web_sys::FileReader::new()
         .map_err(|e| format!("FileReader creation failed: {:?}", e))?;
+
+    let load_promise = js_sys::Promise::new(&mut |resolve, reject| {
+        let reader_for_closure = reader.clone();
+        let closure = Closure::wrap(Box::new(move |_ev: web_sys::Event| {
+            let result = reader_for_closure.result();
+            if let Ok(result) = result {
+                let _ = resolve.call1(&resolve, &result);
+            } else {
+                let _ = reject.call1(&reject, &"Read failed".into());
+            }
+        }) as Box<dyn FnMut(_)>);
+        reader.add_event_listener_with_callback("load", closure.as_ref().unchecked_ref()).unwrap();
+        closure.forget();
+    });
+
     reader.read_as_text(&file)
         .map_err(|e| format!("read_as_text failed: {:?}", e))?;
 
-    let result = reader.result()
-        .map_err(|e| format!("result failed: {:?}", e))?;
+    let result = JsFuture::from(load_promise)
+        .await
+        .map_err(|e| format!("load failed: {:?}", e))?;
     let text = result.as_string()
         .ok_or("result was not a string")?;
 
