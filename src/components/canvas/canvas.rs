@@ -452,8 +452,9 @@ pub fn Canvas(
                 let node_height = 100.0;
                 let selected: HashSet<u32> = nodes.get().iter()
                     .filter(|n| {
-                        n.x >= min_x && n.x + node_width <= max_x &&
-                        n.y >= min_y && n.y + node_height <= max_y
+                        // Partial coverage: any part of node overlapping selection box
+                        n.x + node_width >= min_x && n.x <= max_x &&
+                        n.y + node_height >= min_y && n.y <= max_y
                     })
                     .map(|n| n.id)
                     .collect();
