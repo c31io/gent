@@ -71,6 +71,7 @@ pub fn Canvas(
     let (dragging_node_id, set_dragging_node_id) = signal(Option::<u32>::None);
     let (drag_offset_x, set_drag_offset_x) = signal(0.0f64);
     let (drag_offset_y, set_drag_offset_y) = signal(0.0f64);
+    let (drag_initial_positions, set_drag_initial_positions) = signal(HashMap::<u32, (f64, f64)>::new()); // node_id -> (initial_x, initial_y)
 
     // Connection state (local to canvas - wires are drawn here)
     let (dragging_connection, set_dragging_connection) = signal(Option::<DraggingConnection>::None);
@@ -284,6 +285,7 @@ pub fn Canvas(
                 }
 
                 let is_shift = ev.shift_key();
+                let already_selected = selected_node_ids.get().contains(&node_id);
 
                 if is_shift {
                     // Shift+click: toggle node in selection
@@ -294,6 +296,8 @@ pub fn Canvas(
                             ids.insert(node_id);
                         }
                     });
+                } else if already_selected {
+                    // Already selected - keep multi-selection intact
                 } else {
                     // Normal click: replace selection with this node
                     set_selected_node_ids.update(|ids| {
@@ -314,6 +318,13 @@ pub fn Canvas(
                             set_drag_offset_x.set(canvas_x - node.x);
                             set_drag_offset_y.set(canvas_y - node.y);
                         }
+                        // Store initial positions of all selected nodes for multi-node drag
+                        let initial_positions: HashMap<u32, (f64, f64)> = nodes.get()
+                            .iter()
+                            .filter(|n| selected_ids.contains(&n.id))
+                            .map(|n| (n.id, (n.x, n.y)))
+                            .collect();
+                        set_drag_initial_positions.set(initial_positions);
                         set_dragging_node_id.set(Some(node_id));
                         set_is_panning.set(false);
                         return;
@@ -365,17 +376,31 @@ pub fn Canvas(
             let selected_ids = selected_node_ids.get();
             let drag_offset_x = drag_offset_x.get();
             let drag_offset_y = drag_offset_y.get();
-            let new_x = canvas_x - drag_offset_x;
-            let new_y = canvas_y - drag_offset_y;
+            let initial_positions = drag_initial_positions.get();
 
-            set_nodes.update(|nodes: &mut Vec<NodeState>| {
-                for node in nodes.iter_mut() {
-                    if selected_ids.contains(&node.id) {
-                        node.x = new_x;
-                        node.y = new_y;
-                    }
+            // Calculate the position where the clicked node should be now
+            let clicked_node_new_x = canvas_x - drag_offset_x;
+            let clicked_node_new_y = canvas_y - drag_offset_y;
+
+            // Find the clicked node's initial position to calculate delta
+            if let Some(dragging_id) = dragging_node_id.get() {
+                if let Some((init_x, init_y)) = initial_positions.get(&dragging_id) {
+                    let delta_x = clicked_node_new_x - init_x;
+                    let delta_y = clicked_node_new_y - init_y;
+
+                    // Move all selected nodes by the same delta, preserving their relative positions
+                    set_nodes.update(|nodes: &mut Vec<NodeState>| {
+                        for node in nodes.iter_mut() {
+                            if selected_ids.contains(&node.id) {
+                                if let Some((orig_x, orig_y)) = initial_positions.get(&node.id) {
+                                    node.x = orig_x + delta_x;
+                                    node.y = orig_y + delta_y;
+                                }
+                            }
+                        }
+                    });
                 }
-            });
+            }
             return;
         }
 
