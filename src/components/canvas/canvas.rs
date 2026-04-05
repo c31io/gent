@@ -332,7 +332,6 @@ pub fn Canvas(
                 }
             } else {
                 // Clicked on empty canvas - start rubber-band selection (no shift needed)
-                web_sys::console::log_1(&"Starting rubber-band".into());
                 let canvas_offset_x = get_canvas_offset_x();
                 let canvas_offset_y = 0.0;
                 let pan = pan_x.get();
@@ -713,19 +712,6 @@ pub fn Canvas(
         }
     });
     closure.forget();
-
-    // KEYBOARD LISTENER: window-level NON-PASSIVE (for preventDefault)
-    // Testing if this breaks canvas like the original issue
-    static KEYDOWN_LISTENER_ADDED: std::sync::Once = std::sync::Once::new();
-    let keydown_closure = wasm_bindgen::closure::Closure::wrap(Box::new(move |ev: web_sys::KeyboardEvent| {
-        web_sys::console::log_1(&format!("NONPASSIVE keydown: {}", ev.key()).into());
-    }) as Box<dyn Fn(_)>);
-    KEYDOWN_LISTENER_ADDED.call_once(|| {
-        if let Some(w) = web_sys::window() {
-            let _ = w.add_event_listener_with_callback("keydown", keydown_closure.as_ref().unchecked_ref());
-        }
-    });
-    keydown_closure.forget();
 
     view! {
         <div
