@@ -12,7 +12,6 @@ use crate::components::execution_engine::ExecutionState;
 use crate::components::left_panel::{LeftPanel, NODE_TYPES};
 use crate::components::graph_section::GraphSection;
 use crate::components::right_panel::RightPanel;
-use crate::components::node_inspector::NodeInspector;
 use crate::components::save_load::{copy_to_clipboard, paste_from_clipboard, load_selection, save_saved_selections_to_storage, generate_id, export_to_file, import_from_file};
 use crate::components::toast::{ToastContainer, Toast, ToastType};
 
@@ -138,9 +137,6 @@ pub fn AppLayout() -> impl IntoView {
     let (selected_node_ids, set_selected_node_ids) = signal(HashSet::<u32>::new());
     let (deleting_node_id, set_deleting_node_id) = signal(Option::<u32>::None);
     let (next_node_id, set_next_node_id) = signal(4u32);
-
-    // Inspector state for selected node
-    let (inspector_node, set_inspector_node) = signal(Option::<NodeState>::None);
 
     // Drag preview state
     let (dragging_node_type, set_dragging_node_type) = signal(Option::<String>::None);
@@ -841,16 +837,7 @@ pub fn AppLayout() -> impl IntoView {
                     right_width={Some(right_width.into())}
                     on_trigger={Some(Callback::new(handle_trigger))}
                     on_text_change={Some(Callback::new(move |(node_id, new_text)| handle_text_change(node_id, new_text)))}
-                    on_selection_change={Some(Callback::new(move |node_id| {
-                        if let Some(id) = node_id {
-                            let nodes_snapshot = nodes.get();
-                            if let Some(node) = nodes_snapshot.iter().find(|n| n.id == id) {
-                                set_inspector_node.set(Some(node.clone()));
-                            }
-                        } else {
-                            set_inspector_node.set(None);
-                        }
-                    }))}
+                    on_selection_change={None::<Callback<Option<u32>>>}
                 />
 
                 {/* Right Divider */}
@@ -867,44 +854,6 @@ pub fn AppLayout() -> impl IntoView {
                     <RightPanel execution={execution_state.into()} />
                 </div>
             </div>
-
-            {/* Node Inspector Drawer */}
-            <NodeInspector
-                selected_node={inspector_node.into()}
-                on_node_delete={Some(Callback::new(move |node_id: u32| {
-                    // Get current selection
-                    let selected = selected_node_ids.get();
-                    let to_delete: HashSet<u32> = if selected.contains(&node_id) {
-                        // If the deleted node is in selection, delete all selected
-                        selected.clone()
-                    } else {
-                        // Otherwise just delete the single node
-                        let mut s = HashSet::new();
-                        s.insert(node_id);
-                        s
-                    };
-
-                    // Set all as deleting
-                    set_deleting_node_id.set(Some(*to_delete.iter().next().unwrap()));
-                    set_selected_node_ids.update(|ids| ids.clear());
-
-                    // After animation, remove nodes and their connections
-                    spawn_local(async move {
-                        let ids_to_delete = to_delete.clone();
-                        set_nodes.update(|nodes| {
-                            nodes.retain(|n| !ids_to_delete.contains(&n.id));
-                        });
-                        set_connections.update(|conns| {
-                            conns.retain(|c| !ids_to_delete.contains(&c.source_node_id) && !ids_to_delete.contains(&c.target_node_id));
-                        });
-                        set_deleting_node_id.set(None);
-                    });
-                    set_inspector_node.set(None);
-                }))}
-                on_close={Some(Callback::new(move |_| {
-                    set_inspector_node.set(None);
-                }))}
-            />
 
             {/* Drag Preview */}
             {move || {
