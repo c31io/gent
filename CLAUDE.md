@@ -11,7 +11,8 @@ Gent is a visual node editor for context engineering and agent orchestration —
 - **Dev server**: `trunk serve` (runs on http://localhost:1420)
 - **Production build**: `trunk build` (outputs to `dist/`)
 - **Tauri build**: `cargo tauri build`
-- **Check**: `cargo check`
+- **Check (frontend)**: `cargo check` (in project root - checks WASM/Leptos)
+- **Check (backend)**: `cd src-tauri && cargo check` (checks Tauri Rust code)
 
 ## Architecture
 
@@ -19,6 +20,12 @@ Gent is a visual node editor for context engineering and agent orchestration —
 - **Left Panel** (`src/components/left_panel.rs`): Node palette with 13 predefined node types across 6 categories (Input, Context, Agent, Tool, Control, Output)
 - **Canvas** (`src/components/canvas.rs`): DOM-based node rendering with pan/zoom via CSS transforms
 - **Right Panel** (`src/components/right_panel.rs`): Execution trace display
+
+### Supporting Components
+- `save_load.rs`: File export/import, clipboard copy/paste, localStorage persistence
+- `toast.rs`: Toast notification system (`ToastContainer`, `Toast`, `ToastType`)
+- `modal.rs`: Modal dialogs (`ConfirmModal`, `CredentialPromptModal`)
+- `graph_section.rs`: Left panel UI for saved selections
 
 ### Core Stack
 
@@ -62,6 +69,12 @@ For cleanup, use `leptos::prelude::on_cleanup` (runs when component is destroyed
 - `ConnectionState`: Persistent wire between source_node_id (output) and target_node_id (input)
 - `DraggingConnection`: In-progress wire drag with `source_input_node_id` for reroute tracking
 - `rerouting_from` signal: Tracks which input port is being rerouted from (dims original wire)
+
+### Multi-Select State
+- Selection uses `HashSet<u32>` of node IDs (not `Option<u32>`)
+- Keyboard shortcuts: Ctrl+C (copy), Ctrl+V (paste), Ctrl+S (save), Ctrl+E (export), Ctrl+I (import), Delete, Escape, Ctrl+A (select all)
+- `SavedSelection` struct in `state.rs` for persistent saves
+- `load_selection()` in `save_load.rs` remaps IDs when loading
 
 ### Canvas Interaction Patterns
 
