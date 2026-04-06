@@ -5,4 +5,5 @@
 /src/gent-plugin/target/
 
 /.claude/
+/.worktrees/
 /docs/superpowers/
