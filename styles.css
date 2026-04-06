@@ -602,6 +602,7 @@ html, body, #app {
     padding: 32px 16px;
     color: var(--text-secondary);
     font-size: 12px;
+    user-select: none;
 }
 
 .trace-thread {
@@ -1452,6 +1453,7 @@ html, body, #app {
     height: 100%;
     color: var(--text-muted, #666);
     font-style: italic;
+    user-select: none;
 }
 
 /* Tab Bar */

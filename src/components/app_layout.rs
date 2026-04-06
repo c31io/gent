@@ -10,7 +10,6 @@ use crate::components::canvas::Canvas;
 use crate::components::canvas::geometry::is_text_input_keyboard;
 use crate::components::execution_engine::ExecutionState;
 use crate::components::left_panel::{LeftPanel, NODE_TYPES};
-use crate::components::graph_section::GraphSection;
 use crate::components::right_panel::RightPanel;
 use crate::components::inspector_panel::{InspectorPanel, InspectorTab};
 use crate::components::save_load::{copy_to_clipboard, paste_from_clipboard, load_selection, save_saved_selections_to_storage, generate_id, export_to_file, import_from_file};
@@ -933,19 +932,10 @@ pub fn AppLayout() -> impl IntoView {
                         on_node_right_click={Some(Callback::new(handle_node_inspect))}
                     />
 
-                    {/* Inspector divider (only show if there are tabs) */}
-                    {move || {
-                        if !inspector_tabs.get().is_empty() {
-                            Some(view! {
-                                <div
-                                    class="divider divider-horizontal"
-                                    on:mousedown={handle_inspector_divider_mouse_down}
-                                ></div>
-                            })
-                        } else {
-                            None
-                        }
-                    }}
+                    <div
+                        class="divider divider-horizontal"
+                        on:mousedown={handle_inspector_divider_mouse_down}
+                    ></div>
 
                     {/* Inspector panel */}
                     <InspectorPanel
