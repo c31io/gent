@@ -18,9 +18,10 @@ impl PluginRegistry {
 
     /// Register a new plugin, returns unique plugin_id
     pub fn register(&self, plugin: Arc<dyn Plugin>) -> Result<String, PluginError> {
-        let mut plugins = self.plugins.write().map_err(|_| {
-            PluginError::Runtime("registry poisoned".into())
-        })?;
+        let mut plugins = self
+            .plugins
+            .write()
+            .map_err(|_| PluginError::Runtime("registry poisoned".into()))?;
 
         // Generate unique ID
         let id = Uuid::new_v4().to_string();
@@ -31,11 +32,13 @@ impl PluginRegistry {
 
     /// Unregister a plugin
     pub fn unregister(&self, plugin_id: &str) -> Result<(), PluginError> {
-        let mut plugins = self.plugins.write().map_err(|_| {
-            PluginError::Runtime("registry poisoned".into())
-        })?;
+        let mut plugins = self
+            .plugins
+            .write()
+            .map_err(|_| PluginError::Runtime("registry poisoned".into()))?;
 
-        plugins.remove(plugin_id)
+        plugins
+            .remove(plugin_id)
             .ok_or_else(|| PluginError::NotFound(plugin_id.into()))?;
 
         Ok(())

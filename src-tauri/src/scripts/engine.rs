@@ -57,10 +57,11 @@ impl RuneEngine {
         input: serde_json::Value,
     ) -> Result<Vec<ConsoleLine>, PluginError> {
         let mut sources = Sources::new();
-        let _ = sources.insert(
-            Source::memory(source)
-                .map_err(|e| PluginError::Runtime(format!("failed to create source: {}", e)))?,
-        );
+        let _ =
+            sources
+                .insert(Source::memory(source).map_err(|e| {
+                    PluginError::Runtime(format!("failed to create source: {}", e))
+                })?);
 
         let mut diagnostics = Diagnostics::new();
         let mut lines = Vec::new();

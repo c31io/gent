@@ -4,9 +4,9 @@ use crate::plugins::errors::PluginError;
 use crate::plugins::plugin::{Input, Manifest, Output, Plugin};
 use std::sync::{Arc, Mutex};
 use wasmtime::{Engine, Linker, Module, Store};
-use wasmtime_wasi::WasiCtxBuilder;
 use wasmtime_wasi::pipe::MemoryOutputPipe;
 use wasmtime_wasi::preview1::WasiP1Ctx;
+use wasmtime_wasi::WasiCtxBuilder;
 
 /// Captures stdout/stderr from a WASI command invocation
 struct CapturedOutput {
@@ -23,7 +23,10 @@ impl CapturedOutput {
     }
 
     fn into_contents(self) -> (Vec<u8>, Vec<u8>) {
-        (self.stdout.contents().to_vec(), self.stderr.contents().to_vec())
+        (
+            self.stdout.contents().to_vec(),
+            self.stderr.contents().to_vec(),
+        )
     }
 }
 
@@ -48,11 +51,7 @@ impl WasmPluginLoader {
     }
 }
 
-fn build_wasi_ctx(
-    plugin_id: &str,
-    input_json: &str,
-    captured: &CapturedOutput,
-) -> WasiP1Ctx {
+fn build_wasi_ctx(plugin_id: &str, input_json: &str, captured: &CapturedOutput) -> WasiP1Ctx {
     WasiCtxBuilder::new()
         .args(&[plugin_id, input_json])
         .stdout(captured.stdout.clone())
@@ -132,17 +131,23 @@ impl Plugin for WasmPluginInstance {
 
         // Set up log::println host import for console capture
         let console_lines = self.console_lines.clone();
-        linker.func_wrap("log", "println", move |mut caller: wasmtime::Caller<'_, WasiP1Ctx>, ptr: i32, len: i32| {
-            use wasmtime::Extern;
-            if let Some(Extern::Memory(memory)) = caller.get_export("memory") {
-                let mut buffer = vec![0u8; len as usize];
-                if memory.read(&mut caller, ptr as usize, &mut buffer).is_ok() {
-                    if let Ok(msg) = String::from_utf8(buffer) {
-                        console_lines.lock().unwrap().push(ConsoleLine::output(msg));
+        linker
+            .func_wrap(
+                "log",
+                "println",
+                move |mut caller: wasmtime::Caller<'_, WasiP1Ctx>, ptr: i32, len: i32| {
+                    use wasmtime::Extern;
+                    if let Some(Extern::Memory(memory)) = caller.get_export("memory") {
+                        let mut buffer = vec![0u8; len as usize];
+                        if memory.read(&mut caller, ptr as usize, &mut buffer).is_ok() {
+                            if let Ok(msg) = String::from_utf8(buffer) {
+                                console_lines.lock().unwrap().push(ConsoleLine::output(msg));
+                            }
+                        }
                     }
-                }
-            }
-        }).map_err(|e| PluginError::Runtime(format!("failed to register log::println: {}", e)))?;
+                },
+            )
+            .map_err(|e| PluginError::Runtime(format!("failed to register log::println: {}", e)))?;
 
         // Instantiate - WASI imports are auto-linked via the linker
         let instance = linker
@@ -156,7 +161,8 @@ impl Plugin for WasmPluginInstance {
             .map_err(|e| PluginError::Runtime(format!("failed to find main entry: {}", e)))?;
 
         // Call the entry point - proc_exit(0) succeeds, proc_exit(N) traps with error
-        start.call(&mut store, ())
+        start
+            .call(&mut store, ())
             .map_err(|e| PluginError::Runtime(format!("plugin execution failed: {}", e)))?;
 
         // Collect console lines from the plugin execution (intentionally unused - deferred integration)

@@ -2,8 +2,13 @@ use leptos::prelude::*;
 use std::collections::{HashMap, HashSet};
 use wasm_bindgen::JsCast;
 
-use crate::components::canvas::geometry::{find_input_port_at, get_node_id_from_event, is_port, is_text_input, is_trigger_button};
-use crate::components::canvas::state::{ConnectionState, DraggingConnection, NodeState, Port, PortDirection, PortType, get_output_ports, compute_port_offsets, get_port_canvas_position};
+use crate::components::canvas::geometry::{
+    find_input_port_at, get_node_id_from_event, is_port, is_text_input, is_trigger_button,
+};
+use crate::components::canvas::state::{
+    compute_port_offsets, get_output_ports, get_port_canvas_position, ConnectionState,
+    DraggingConnection, NodeState, Port, PortDirection, PortType,
+};
 use crate::components::canvas::wires::draw_connections;
 use crate::components::nodes::node::GraphNode;
 
@@ -40,21 +45,29 @@ pub fn Canvas(
     connections: Signal<Vec<ConnectionState>>,
     set_connections: WriteSignal<Vec<ConnectionState>>,
     /// Node ID currently being deleted (for shrink animation)
-    #[prop(default = None)] deleting_node_id: Option<Signal<Option<u32>>>,
+    #[prop(default = None)]
+    deleting_node_id: Option<Signal<Option<u32>>>,
     /// Callback when node selection changes
-    #[prop(default = None)] on_selection_change: Option<Callback<Option<u32>>>,
+    #[prop(default = None)]
+    on_selection_change: Option<Callback<Option<u32>>>,
     /// Callback when a node is dropped from the palette (receives node_type, canvas x, y)
-    #[prop(default = None)] on_node_drop: Option<Callback<(String, f64, f64)>>,
+    #[prop(default = None)]
+    on_node_drop: Option<Callback<(String, f64, f64)>>,
     /// Left panel width signal (for calculating canvas offset)
-    #[prop(default = None)] left_width: Option<Signal<i32>>,
+    #[prop(default = None)]
+    left_width: Option<Signal<i32>>,
     /// Right panel width signal (for canvas redraw on resize)
-    #[prop(default = None)] right_width: Option<Signal<i32>>,
+    #[prop(default = None)]
+    right_width: Option<Signal<i32>>,
     /// Inspector panel height signal (for canvas redraw on resize)
-    #[prop(default = None)] inspector_height: Option<Signal<i32>>,
+    #[prop(default = None)]
+    inspector_height: Option<Signal<i32>>,
     /// Callback when trigger node is clicked
-    #[prop(default = None)] on_trigger: Option<Callback<u32>>,
+    #[prop(default = None)]
+    on_trigger: Option<Callback<u32>>,
     /// Callback when text input changes in a node
-    #[prop(default = None)] on_text_change: Option<Callback<(u32, String)>>,
+    #[prop(default = None)]
+    on_text_change: Option<Callback<(u32, String)>>,
     /// Callback when a node is right-clicked for inspection
     /// Args: (node_id, is_double_click)
     #[prop(default = None)]
@@ -77,7 +90,8 @@ pub fn Canvas(
     let (dragging_node_id, set_dragging_node_id) = signal(Option::<u32>::None);
     let (drag_offset_x, set_drag_offset_x) = signal(0.0f64);
     let (drag_offset_y, set_drag_offset_y) = signal(0.0f64);
-    let (drag_initial_positions, set_drag_initial_positions) = signal(HashMap::<u32, (f64, f64)>::new()); // node_id -> (initial_x, initial_y)
+    let (drag_initial_positions, set_drag_initial_positions) =
+        signal(HashMap::<u32, (f64, f64)>::new()); // node_id -> (initial_x, initial_y)
 
     // Connection state (local to canvas - wires are drawn here)
     let (dragging_connection, set_dragging_connection) = signal(Option::<DraggingConnection>::None);
@@ -89,11 +103,9 @@ pub fn Canvas(
     let (selection_box, set_selection_box) = signal(Option::<(f64, f64, f64, f64)>::None); // (start_x, start_y, end_x, end_y)
     let (selection_drag_start, set_selection_drag_start) = signal(Option::<(f64, f64)>::None); // canvas coords of mousedown
 
-
     // Get canvas offset (left panel width + divider width)
-    let get_canvas_offset_x = move || -> f64 {
-        left_width.map(|w| w.get() as f64 + 4.0).unwrap_or(264.0)
-    };
+    let get_canvas_offset_x =
+        move || -> f64 { left_width.map(|w| w.get() as f64 + 4.0).unwrap_or(264.0) };
 
     // Zoom controls
     let zoom_in = move |_| {
@@ -121,12 +133,15 @@ pub fn Canvas(
         let nodes = nodes.get();
         let mut positions: HashMap<(u32, String), (f64, f64)> = HashMap::new();
         for node in &nodes {
-            let input_ports: Vec<_> = node.ports.iter()
+            let input_ports: Vec<_> = node
+                .ports
+                .iter()
                 .filter(|p| p.direction == PortDirection::In)
                 .cloned()
                 .collect();
             let output_ports = get_output_ports(&node.node_type, &node.variant);
-            let all_ports: Vec<_> = input_ports.into_iter()
+            let all_ports: Vec<_> = input_ports
+                .into_iter()
                 .chain(output_ports.into_iter())
                 .collect();
             let ports_with_offsets = compute_port_offsets(&all_ports);
@@ -145,52 +160,58 @@ pub fn Canvas(
 
     // Get port center position from memo
     let get_port_center = move |node_id: u32, port_name: &str| -> (f64, f64) {
-        port_positions.get().get(&(node_id, port_name.to_string())).copied()
+        port_positions
+            .get()
+            .get(&(node_id, port_name.to_string()))
+            .copied()
             .unwrap_or((0.0, 0.0))
     };
 
     // Port drag handlers
-    let handle_output_drag_start = move |node_id: u32, port_name: String, _mouse_x: f64, _mouse_y: f64| {
-        let (sx, sy) = get_port_center(node_id, &port_name);
-        set_dragging_connection.set(Some(DraggingConnection {
-            source_node_id: node_id,
-            source_port_name: port_name.clone(),
-            source_input_node_id: None,
-            current_x: sx,
-            current_y: sy,
-            is_dragging: false,
-        }));
-    };
+    let handle_output_drag_start =
+        move |node_id: u32, port_name: String, _mouse_x: f64, _mouse_y: f64| {
+            let (sx, sy) = get_port_center(node_id, &port_name);
+            set_dragging_connection.set(Some(DraggingConnection {
+                source_node_id: node_id,
+                source_port_name: port_name.clone(),
+                source_input_node_id: None,
+                current_x: sx,
+                current_y: sy,
+                is_dragging: false,
+            }));
+        };
 
     let handle_input_drag_end = move |node_id: u32, target_port_name: String, _x: f64, _y: f64| {
         if let Some(dc) = dragging_connection.get() {
             if dc.source_node_id != node_id {
                 // Get source and target nodes
                 let all_nodes = nodes.get();
-                let source_node = all_nodes
-                    .iter()
-                    .find(|n| n.id == dc.source_node_id);
+                let source_node = all_nodes.iter().find(|n| n.id == dc.source_node_id);
 
-                let target_node = all_nodes
-                    .iter()
-                    .find(|n| n.id == node_id);
+                let target_node = all_nodes.iter().find(|n| n.id == node_id);
 
                 // Validate port compatibility - the SPECIFIC ports being connected must be compatible
-                let is_compatible = source_node.and_then(|s| {
-                    target_node.map(|t| {
-                        // Get the specific source port being dragged from
-                        let src_output_ports = get_output_ports(&s.node_type, &s.variant);
-                        let src_port = src_output_ports
-                            .iter()
-                            .find(|p| p.name == dc.source_port_name);
-                        // Get the specific target port being connected to
-                        let tgt_port = t.ports.iter()
-                            .filter(|p| p.direction == PortDirection::In)
-                            .find(|p| p.name == target_port_name);
-                        // Both ports must exist and be compatible
-                        src_port.and_then(|sp| tgt_port.map(|tp| ports_compatible(sp, tp))).unwrap_or(false)
+                let is_compatible = source_node
+                    .and_then(|s| {
+                        target_node.map(|t| {
+                            // Get the specific source port being dragged from
+                            let src_output_ports = get_output_ports(&s.node_type, &s.variant);
+                            let src_port = src_output_ports
+                                .iter()
+                                .find(|p| p.name == dc.source_port_name);
+                            // Get the specific target port being connected to
+                            let tgt_port = t
+                                .ports
+                                .iter()
+                                .filter(|p| p.direction == PortDirection::In)
+                                .find(|p| p.name == target_port_name);
+                            // Both ports must exist and be compatible
+                            src_port
+                                .and_then(|sp| tgt_port.map(|tp| ports_compatible(sp, tp)))
+                                .unwrap_or(false)
+                        })
                     })
-                }).unwrap_or(false);
+                    .unwrap_or(false);
 
                 if !is_compatible {
                     // Invalid connection - cancel the drag
@@ -200,13 +221,19 @@ pub fn Canvas(
                 }
 
                 if let Some(src_input) = dc.source_input_node_id {
-                    set_connections.update(|c: &mut Vec<ConnectionState>| c.retain(|conn|
-                        !(conn.source_node_id == dc.source_node_id && conn.target_node_id == src_input)
-                    ));
+                    set_connections.update(|c: &mut Vec<ConnectionState>| {
+                        c.retain(|conn| {
+                            !(conn.source_node_id == dc.source_node_id
+                                && conn.target_node_id == src_input)
+                        })
+                    });
                 }
-                set_connections.update(|c: &mut Vec<ConnectionState>| c.retain(|conn|
-                    !(conn.target_node_id == node_id && conn.target_port_name == target_port_name)
-                ));
+                set_connections.update(|c: &mut Vec<ConnectionState>| {
+                    c.retain(|conn| {
+                        !(conn.target_node_id == node_id
+                            && conn.target_port_name == target_port_name)
+                    })
+                });
                 let new_conn = ConnectionState {
                     id: next_connection_id.get(),
                     source_node_id: dc.source_node_id,
@@ -224,14 +251,13 @@ pub fn Canvas(
     };
 
     let handle_input_click: Callback<(u32,)> = Callback::new(move |args: (u32,)| {
-        set_connections.update(|c: &mut Vec<ConnectionState>| c.retain(|conn| conn.target_node_id != args.0));
+        set_connections
+            .update(|c: &mut Vec<ConnectionState>| c.retain(|conn| conn.target_node_id != args.0));
     });
 
     let handle_input_reroute_start: Callback<(u32,)> = Callback::new(move |args: (u32,)| {
         let all_connections = connections.get();
-        let existing_conn = all_connections
-            .iter()
-            .find(|c| c.target_node_id == args.0);
+        let existing_conn = all_connections.iter().find(|c| c.target_node_id == args.0);
 
         if let Some(conn) = existing_conn {
             let src_id = conn.source_node_id;
@@ -332,7 +358,8 @@ pub fn Canvas(
                             set_drag_offset_y.set(canvas_y - node.y);
                         }
                         // Store initial positions of all selected nodes for multi-node drag
-                        let initial_positions: HashMap<u32, (f64, f64)> = nodes.get()
+                        let initial_positions: HashMap<u32, (f64, f64)> = nodes
+                            .get()
                             .iter()
                             .filter(|n| selected_ids.contains(&n.id))
                             .map(|n| (n.id, (n.x, n.y)))
@@ -416,7 +443,10 @@ pub fn Canvas(
             return;
         }
 
-        let is_dragging = dragging_connection.get().map(|dc| dc.is_dragging).unwrap_or(false);
+        let is_dragging = dragging_connection
+            .get()
+            .map(|dc| dc.is_dragging)
+            .unwrap_or(false);
 
         if !is_dragging && dragging_connection.get().is_some() {
             set_is_panning.set(false);
@@ -487,11 +517,15 @@ pub fn Canvas(
                 let max_y = start_y.max(end_y);
                 let node_width = 160.0;
                 let node_height = 100.0;
-                let selected: HashSet<u32> = nodes.get().iter()
+                let selected: HashSet<u32> = nodes
+                    .get()
+                    .iter()
                     .filter(|n| {
                         // Partial coverage: any part of node overlapping selection box
-                        n.x + node_width >= min_x && n.x <= max_x &&
-                        n.y + node_height >= min_y && n.y <= max_y
+                        n.x + node_width >= min_x
+                            && n.x <= max_x
+                            && n.y + node_height >= min_y
+                            && n.y <= max_y
                     })
                     .map(|n| n.id)
                     .collect();
@@ -523,9 +557,12 @@ pub fn Canvas(
                 let target = find_input_port_at(ev.client_x() as f64, ev.client_y() as f64);
                 if target.is_none() {
                     if let Some(src_input) = dc.source_input_node_id {
-                        set_connections.update(|c: &mut Vec<ConnectionState>| c.retain(|conn|
-                            !(conn.source_node_id == dc.source_node_id && conn.target_node_id == src_input)
-                        ));
+                        set_connections.update(|c: &mut Vec<ConnectionState>| {
+                            c.retain(|conn| {
+                                !(conn.source_node_id == dc.source_node_id
+                                    && conn.target_node_id == src_input)
+                            })
+                        });
                     }
                     set_dragging_connection.set(None);
                     set_rerouting_from.set(None);
@@ -601,10 +638,22 @@ pub fn Canvas(
         let node_width = 160.0;
         let node_height = 100.0;
 
-        let min_x = nodes_snapshot.iter().map(|n| n.x).fold(f64::INFINITY, f64::min);
-        let min_y = nodes_snapshot.iter().map(|n| n.y).fold(f64::INFINITY, f64::min);
-        let max_x = nodes_snapshot.iter().map(|n| n.x + node_width).fold(f64::NEG_INFINITY, f64::max);
-        let max_y = nodes_snapshot.iter().map(|n| n.y + node_height).fold(f64::NEG_INFINITY, f64::max);
+        let min_x = nodes_snapshot
+            .iter()
+            .map(|n| n.x)
+            .fold(f64::INFINITY, f64::min);
+        let min_y = nodes_snapshot
+            .iter()
+            .map(|n| n.y)
+            .fold(f64::INFINITY, f64::min);
+        let max_x = nodes_snapshot
+            .iter()
+            .map(|n| n.x + node_width)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let max_y = nodes_snapshot
+            .iter()
+            .map(|n| n.y + node_height)
+            .fold(f64::NEG_INFINITY, f64::max);
 
         let content_width = max_x - min_x;
         let content_height = max_y - min_y;
@@ -724,7 +773,8 @@ pub fn Canvas(
 
     RESIZE_LISTENER_ADDED.call_once(|| {
         if let Some(w) = web_sys::window() {
-            w.add_event_listener_with_callback("resize", closure.as_ref().unchecked_ref()).ok();
+            w.add_event_listener_with_callback("resize", closure.as_ref().unchecked_ref())
+                .ok();
         }
     });
     closure.forget();

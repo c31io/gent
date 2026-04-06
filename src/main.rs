@@ -1,6 +1,6 @@
-mod tauri_invoke;
 mod app;
 mod components;
+mod tauri_invoke;
 
 use app::*;
 use leptos::prelude::*;

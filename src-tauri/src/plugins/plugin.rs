@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
 use crate::plugins::capabilities::Capability;
 use crate::plugins::errors::PluginError;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Manifest {

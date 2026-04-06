@@ -1,19 +1,25 @@
+use gloo_timers::future::TimeoutFuture;
 use leptos::prelude::*;
+use std::collections::{HashMap, HashSet};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::spawn_local;
-use gloo_timers::future::TimeoutFuture;
-use std::collections::{HashMap, HashSet};
 
-use crate::components::canvas::state::{ConnectionState, NodeState, NodeStatus, SavedSelection, default_ports_for_type, default_variant_for_type};
-use crate::components::canvas::Canvas;
 use crate::components::canvas::geometry::is_text_input_keyboard;
+use crate::components::canvas::state::{
+    default_ports_for_type, default_variant_for_type, ConnectionState, NodeState, NodeStatus,
+    SavedSelection,
+};
+use crate::components::canvas::Canvas;
 use crate::components::execution_engine::ExecutionState;
+use crate::components::inspector_panel::{InspectorPanel, InspectorTab};
 use crate::components::left_panel::{LeftPanel, NODE_TYPES};
 use crate::components::right_panel::RightPanel;
-use crate::components::inspector_panel::{InspectorPanel, InspectorTab};
-use crate::components::save_load::{copy_to_clipboard, paste_from_clipboard, load_selection, save_saved_selections_to_storage, generate_id, export_to_file, import_from_file};
-use crate::components::toast::{ToastContainer, Toast, ToastType};
+use crate::components::save_load::{
+    copy_to_clipboard, export_to_file, generate_id, import_from_file, load_selection,
+    paste_from_clipboard, save_saved_selections_to_storage,
+};
+use crate::components::toast::{Toast, ToastContainer, ToastType};
 
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct LlmOutput {
@@ -43,13 +49,15 @@ async fn call_llm_complete(
     if !js_sys::Reflect::set(&config_js, &"format".into(), &format.into()).unwrap_or(false) {
         return Err("Failed to set format".to_string());
     }
-    if !js_sys::Reflect::set(&config_js, &"model_name".into(), &model_name.into()).unwrap_or(false) {
+    if !js_sys::Reflect::set(&config_js, &"model_name".into(), &model_name.into()).unwrap_or(false)
+    {
         return Err("Failed to set model_name".to_string());
     }
     if !js_sys::Reflect::set(&config_js, &"api_key".into(), &api_key.into()).unwrap_or(false) {
         return Err("Failed to set api_key".to_string());
     }
-    if !js_sys::Reflect::set(&config_js, &"custom_url".into(), &custom_url.into()).unwrap_or(false) {
+    if !js_sys::Reflect::set(&config_js, &"custom_url".into(), &custom_url.into()).unwrap_or(false)
+    {
         return Err("Failed to set custom_url".to_string());
     }
     let input = js_sys::Object::new();
@@ -60,12 +68,17 @@ async fn call_llm_complete(
     if !js_sys::Reflect::set(&input_js, &"prompt".into(), &prompt.into()).unwrap_or(false) {
         return Err("Failed to set prompt".to_string());
     }
-    if !js_sys::Reflect::set(&input_js, &"temperature".into(), &JsValue::from_f64(temperature)).unwrap_or(false) {
+    if !js_sys::Reflect::set(
+        &input_js,
+        &"temperature".into(),
+        &JsValue::from_f64(temperature),
+    )
+    .unwrap_or(false)
+    {
         return Err("Failed to set temperature".to_string());
     }
     let js_value = tauri_invoke::invoke("llm_complete".into(), &opts).await?;
-    serde_wasm_bindgen::from_value(js_value)
-        .map_err(|e| format!("deserialization failed: {:?}", e))
+    serde_wasm_bindgen::from_value(js_value).map_err(|e| format!("deserialization failed: {:?}", e))
 }
 
 /// Main application layout with left panel, canvas, and right panel
@@ -171,7 +184,9 @@ pub fn AppLayout() -> impl IntoView {
     let handle_text_change = move |node_id: u32, new_text: String| {
         set_nodes.update(|nodes: &mut Vec<NodeState>| {
             if let Some(node) = nodes.iter_mut().find(|n| n.id == node_id) {
-                if let crate::components::canvas::state::NodeVariant::UserInput { text } = &mut node.variant {
+                if let crate::components::canvas::state::NodeVariant::UserInput { text } =
+                    &mut node.variant
+                {
                     *text = new_text;
                 }
             }
@@ -186,7 +201,13 @@ pub fn AppLayout() -> impl IntoView {
         move |message: String, toast_type: ToastType| {
             let id = next_toast_id.get();
             set_next_toast_id.update(|n| *n += 1);
-            set_toasts.update(|t| t.push(Toast { id, message, toast_type }));
+            set_toasts.update(|t| {
+                t.push(Toast {
+                    id,
+                    message,
+                    toast_type,
+                })
+            });
             let set_toasts_clone = set_toasts.clone();
             spawn_local(async move {
                 TimeoutFuture::new(3000).await;
@@ -237,14 +258,28 @@ pub fn AppLayout() -> impl IntoView {
                         id: generate_id(),
                         name: "Selection".to_string(),
                         created_at: js_sys::Date::now(),
-                        nodes: nodes_snapshot.into_iter().filter(|n| selected.contains(&n.id)).collect(),
-                        connections: conns_snapshot.into_iter().filter(|c| selected.contains(&c.source_node_id) && selected.contains(&c.target_node_id)).collect(),
+                        nodes: nodes_snapshot
+                            .into_iter()
+                            .filter(|n| selected.contains(&n.id))
+                            .collect(),
+                        connections: conns_snapshot
+                            .into_iter()
+                            .filter(|c| {
+                                selected.contains(&c.source_node_id)
+                                    && selected.contains(&c.target_node_id)
+                            })
+                            .collect(),
                     };
                     let add_toast_clone = add_toast.clone();
                     spawn_local(async move {
                         match copy_to_clipboard(selection, true).await {
-                            Ok(_) => add_toast_clone("Copied to clipboard".to_string(), ToastType::Success),
-                            Err(e) => add_toast_clone(format!("Copy failed: {}", e), ToastType::Error),
+                            Ok(_) => add_toast_clone(
+                                "Copied to clipboard".to_string(),
+                                ToastType::Success,
+                            ),
+                            Err(e) => {
+                                add_toast_clone(format!("Copy failed: {}", e), ToastType::Error)
+                            }
                         }
                     });
                 }
@@ -268,9 +303,14 @@ pub fn AppLayout() -> impl IntoView {
                                 set_connections_clone.update(|c| c.extend(new_conns));
                                 set_next_node_id_clone.set(next_id);
                                 set_next_connection_id_clone.set(next_conn);
-                                add_toast_clone("Pasted from clipboard".to_string(), ToastType::Success);
+                                add_toast_clone(
+                                    "Pasted from clipboard".to_string(),
+                                    ToastType::Success,
+                                );
                             }
-                            Err(e) => add_toast_clone(format!("Paste failed: {}", e), ToastType::Error),
+                            Err(e) => {
+                                add_toast_clone(format!("Paste failed: {}", e), ToastType::Error)
+                            }
                         }
                     });
                 }
@@ -288,8 +328,17 @@ pub fn AppLayout() -> impl IntoView {
                         id: generate_id(),
                         name: "Selection".to_string(),
                         created_at: js_sys::Date::now(),
-                        nodes: nodes_snapshot.into_iter().filter(|n| selected.contains(&n.id)).collect(),
-                        connections: conns_snapshot.into_iter().filter(|c| selected.contains(&c.source_node_id) && selected.contains(&c.target_node_id)).collect(),
+                        nodes: nodes_snapshot
+                            .into_iter()
+                            .filter(|n| selected.contains(&n.id))
+                            .collect(),
+                        connections: conns_snapshot
+                            .into_iter()
+                            .filter(|c| {
+                                selected.contains(&c.source_node_id)
+                                    && selected.contains(&c.target_node_id)
+                            })
+                            .collect(),
                     };
                     let mut selections = saved_selections.get();
                     selections.push(selection.clone());
@@ -311,15 +360,29 @@ pub fn AppLayout() -> impl IntoView {
                         id: generate_id(),
                         name: "Selection".to_string(),
                         created_at: js_sys::Date::now(),
-                        nodes: nodes_snapshot.into_iter().filter(|n| selected.contains(&n.id)).collect(),
-                        connections: conns_snapshot.into_iter().filter(|c| selected.contains(&c.source_node_id) && selected.contains(&c.target_node_id)).collect(),
+                        nodes: nodes_snapshot
+                            .into_iter()
+                            .filter(|n| selected.contains(&n.id))
+                            .collect(),
+                        connections: conns_snapshot
+                            .into_iter()
+                            .filter(|c| {
+                                selected.contains(&c.source_node_id)
+                                    && selected.contains(&c.target_node_id)
+                            })
+                            .collect(),
                     };
-                    let filename = format!("{}.json", selection.name.to_lowercase().replace(" ", "_"));
+                    let filename =
+                        format!("{}.json", selection.name.to_lowercase().replace(" ", "_"));
                     let add_toast_clone = add_toast.clone();
                     spawn_local(async move {
                         match export_to_file(&selection, &filename).await {
-                            Ok(_) => add_toast_clone("Exported to file".to_string(), ToastType::Success),
-                            Err(e) => add_toast_clone(format!("Export failed: {}", e), ToastType::Error),
+                            Ok(_) => {
+                                add_toast_clone("Exported to file".to_string(), ToastType::Success)
+                            }
+                            Err(e) => {
+                                add_toast_clone(format!("Export failed: {}", e), ToastType::Error)
+                            }
                         }
                     });
                 }
@@ -344,9 +407,14 @@ pub fn AppLayout() -> impl IntoView {
                                 set_connections_clone.update(|c| c.extend(new_conns));
                                 set_next_node_id_clone.set(next_id);
                                 set_next_connection_id_clone.set(next_conn);
-                                add_toast_clone("Imported from file".to_string(), ToastType::Success);
+                                add_toast_clone(
+                                    "Imported from file".to_string(),
+                                    ToastType::Success,
+                                );
                             }
-                            Err(e) => add_toast_clone(format!("Import failed: {}", e), ToastType::Error),
+                            Err(e) => {
+                                add_toast_clone(format!("Import failed: {}", e), ToastType::Error)
+                            }
                         }
                     });
                 }
@@ -360,7 +428,9 @@ pub fn AppLayout() -> impl IntoView {
                     // Delete selected nodes
                     ev.prevent_default();
                     let to_delete = selected_node_ids.get();
-                    if to_delete.is_empty() { return; }
+                    if to_delete.is_empty() {
+                        return;
+                    }
                     // Animate and delete
                     if let Some(first_id) = to_delete.iter().next().copied() {
                         set_deleting_node_id.set(Some(first_id));
@@ -372,10 +442,14 @@ pub fn AppLayout() -> impl IntoView {
                     let set_selected_node_ids_clone = set_selected_node_ids.clone();
                     spawn_local(async move {
                         TimeoutFuture::new(300).await;
-                        set_nodes_clone.update(|n| n.retain(|node| !to_delete_clone.contains(&node.id)));
-                        set_connections_clone.update(|c| c.retain(|conn|
-                            !to_delete_clone.contains(&conn.source_node_id) && !to_delete_clone.contains(&conn.target_node_id)
-                        ));
+                        set_nodes_clone
+                            .update(|n| n.retain(|node| !to_delete_clone.contains(&node.id)));
+                        set_connections_clone.update(|c| {
+                            c.retain(|conn| {
+                                !to_delete_clone.contains(&conn.source_node_id)
+                                    && !to_delete_clone.contains(&conn.target_node_id)
+                            })
+                        });
                         set_deleting_node_id_clone.set(None);
                         set_selected_node_ids_clone.update(|ids| ids.clear());
                     });
@@ -394,7 +468,10 @@ pub fn AppLayout() -> impl IntoView {
 
     KEYDOWN_LISTENER_ADDED.call_once(|| {
         if let Some(w) = web_sys::window() {
-            let _ = w.add_event_listener_with_callback("keydown", keydown_closure.as_ref().unchecked_ref());
+            let _ = w.add_event_listener_with_callback(
+                "keydown",
+                keydown_closure.as_ref().unchecked_ref(),
+            );
         }
     });
     keydown_closure.forget();
@@ -450,12 +527,17 @@ pub fn AppLayout() -> impl IntoView {
         let nodes_snapshot = nodes.get();
         let connections_snapshot = connections.get();
 
-        if nodes_snapshot.iter().find(|n| n.id == node_id && n.node_type == "trigger").is_none() {
+        if nodes_snapshot
+            .iter()
+            .find(|n| n.id == node_id && n.node_type == "trigger")
+            .is_none()
+        {
             return;
         }
 
         // Get execution order with upstream results
-        let execution_plan = execute_downstream_order(&nodes_snapshot, &connections_snapshot, node_id);
+        let execution_plan =
+            execute_downstream_order(&nodes_snapshot, &connections_snapshot, node_id);
 
         let mut exec = ExecutionState::new();
         exec.running = true;
@@ -476,10 +558,14 @@ pub fn AppLayout() -> impl IntoView {
 
             if exec_node_id == node_id {
                 // Trigger node itself
-                let mut task = crate::components::execution_engine::Task::new(exec_node_id, "trigger", None);
+                let mut task =
+                    crate::components::execution_engine::Task::new(exec_node_id, "trigger", None);
                 task.status = crate::components::execution_engine::TaskStatus::Running;
                 task.started_at = Some(crate::components::execution_engine::Timestamp::now());
-                task.add_message(&format!("Trigger fired [task_id={}]", task.id), crate::components::execution_engine::TraceLevel::Info);
+                task.add_message(
+                    &format!("Trigger fired [task_id={}]", task.id),
+                    crate::components::execution_engine::TraceLevel::Info,
+                );
                 task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
                 task.status = crate::components::execution_engine::TaskStatus::Complete;
                 exec.tasks.push(task);
@@ -491,28 +577,50 @@ pub fn AppLayout() -> impl IntoView {
                     // Set waiting_on if we have upstream dependencies
                     let waiting_on = upstream.keys().next().copied();
 
-                    let mut task = crate::components::execution_engine::Task::new(exec_node_id, &node.node_type, parent_id.clone());
+                    let mut task = crate::components::execution_engine::Task::new(
+                        exec_node_id,
+                        &node.node_type,
+                        parent_id.clone(),
+                    );
                     task.waiting_on = waiting_on;
                     task.status = crate::components::execution_engine::TaskStatus::Running;
                     task.started_at = Some(crate::components::execution_engine::Timestamp::now());
-                    task.add_message(&format!("{} [node_id={}, parent_id={:?}]", node.label, task.node_id, task.parent_id), crate::components::execution_engine::TraceLevel::Info);
+                    task.add_message(
+                        &format!(
+                            "{} [node_id={}, parent_id={:?}]",
+                            node.label, task.node_id, task.parent_id
+                        ),
+                        crate::components::execution_engine::TraceLevel::Info,
+                    );
 
                     // Execute node with upstream results
                     let mut skip_post_push = false;
                     let result = match node.node_type.as_str() {
                         "user_input" => {
-                            if let crate::components::canvas::state::NodeVariant::UserInput { text } = &node.variant {
-                                task.add_message(&format!("Text Input: {}", text), crate::components::execution_engine::TraceLevel::Info);
+                            if let crate::components::canvas::state::NodeVariant::UserInput {
+                                text,
+                            } = &node.variant
+                            {
+                                task.add_message(
+                                    &format!("Text Input: {}", text),
+                                    crate::components::execution_engine::TraceLevel::Info,
+                                );
                                 text.clone()
                             } else {
-                                task.add_message("Text Input (no text)", crate::components::execution_engine::TraceLevel::Warn);
+                                task.add_message(
+                                    "Text Input (no text)",
+                                    crate::components::execution_engine::TraceLevel::Warn,
+                                );
                                 String::new()
                             }
                         }
                         "chat_output" => {
                             // Get input from upstream (user_input node)
                             let input = upstream.values().next().cloned().unwrap_or_default();
-                            task.add_message(&format!("Text Output received: {}", input), crate::components::execution_engine::TraceLevel::Info);
+                            task.add_message(
+                                &format!("Text Output received: {}", input),
+                                crate::components::execution_engine::TraceLevel::Info,
+                            );
                             // Update the chat_output node's variant response
                             set_nodes.update(|nodes: &mut Vec<NodeState>| {
                                 if let Some(n) = nodes.iter_mut().find(|n| n.id == exec_node_id) {
@@ -524,28 +632,52 @@ pub fn AppLayout() -> impl IntoView {
                             input
                         }
                         "web_search" => {
-                            task.add_message("Web Search → { mock results }", crate::components::execution_engine::TraceLevel::Info);
+                            task.add_message(
+                                "Web Search → { mock results }",
+                                crate::components::execution_engine::TraceLevel::Info,
+                            );
                             r#"{"query":"mock","results":[]}"#.to_string()
                         }
                         "code_execute" => {
-                            task.add_message("Code Execute → (TBD)", crate::components::execution_engine::TraceLevel::Info);
+                            task.add_message(
+                                "Code Execute → (TBD)",
+                                crate::components::execution_engine::TraceLevel::Info,
+                            );
                             "code executed".to_string()
                         }
                         "image_input" => {
-                            if let crate::components::canvas::state::NodeVariant::FileInput { path } = &node.variant {
-                                task.add_message(&format!("Image: {}", path), crate::components::execution_engine::TraceLevel::Info);
+                            if let crate::components::canvas::state::NodeVariant::FileInput {
+                                path,
+                            } = &node.variant
+                            {
+                                task.add_message(
+                                    &format!("Image: {}", path),
+                                    crate::components::execution_engine::TraceLevel::Info,
+                                );
                                 path.clone()
                             } else {
-                                task.add_message("Image Input (no path)", crate::components::execution_engine::TraceLevel::Warn);
+                                task.add_message(
+                                    "Image Input (no path)",
+                                    crate::components::execution_engine::TraceLevel::Warn,
+                                );
                                 String::new()
                             }
                         }
                         "audio_input" => {
-                            if let crate::components::canvas::state::NodeVariant::FileInput { path } = &node.variant {
-                                task.add_message(&format!("Audio: {}", path), crate::components::execution_engine::TraceLevel::Info);
+                            if let crate::components::canvas::state::NodeVariant::FileInput {
+                                path,
+                            } = &node.variant
+                            {
+                                task.add_message(
+                                    &format!("Audio: {}", path),
+                                    crate::components::execution_engine::TraceLevel::Info,
+                                );
                                 path.clone()
                             } else {
-                                task.add_message("Audio Input (no path)", crate::components::execution_engine::TraceLevel::Warn);
+                                task.add_message(
+                                    "Audio Input (no path)",
+                                    crate::components::execution_engine::TraceLevel::Warn,
+                                );
                                 String::new()
                             }
                         }
@@ -568,11 +700,20 @@ pub fn AppLayout() -> impl IntoView {
                                         let rest = &json[value_start..];
                                         if rest.starts_with('"') {
                                             // Quoted string value
-                                            let end = rest[1..].find('"').map(|i| i + 1).unwrap_or(rest.len());
+                                            let end = rest[1..]
+                                                .find('"')
+                                                .map(|i| i + 1)
+                                                .unwrap_or(rest.len());
                                             rest[1..end].to_string()
                                         } else {
                                             // Fallback for other values
-                                            rest.split(',').next().unwrap_or("").split('}').next().unwrap_or("").to_string()
+                                            rest.split(',')
+                                                .next()
+                                                .unwrap_or("")
+                                                .split('}')
+                                                .next()
+                                                .unwrap_or("")
+                                                .to_string()
                                         }
                                     })
                                     .unwrap_or_default()
@@ -591,12 +732,20 @@ pub fn AppLayout() -> impl IntoView {
 
                             // Push a "waiting" task
                             let mut model_task = crate::components::execution_engine::Task::new(
-                                exec_node_id, "model", parent_id.clone(),
+                                exec_node_id,
+                                "model",
+                                parent_id.clone(),
                             );
-                            model_task.status = crate::components::execution_engine::TaskStatus::Waiting;
+                            model_task.status =
+                                crate::components::execution_engine::TaskStatus::Waiting;
                             model_task.waiting_on = Some(exec_node_id);
                             model_task.add_message(
-                                &format!("Model call: {} / {} / prompt_len={}", config.format, config.model_name, prompt_text.len()),
+                                &format!(
+                                    "Model call: {} / {} / prompt_len={}",
+                                    config.format,
+                                    config.model_name,
+                                    prompt_text.len()
+                                ),
                                 crate::components::execution_engine::TraceLevel::Info,
                             );
                             exec.tasks.push(model_task);
@@ -611,7 +760,8 @@ pub fn AppLayout() -> impl IntoView {
                                     config.custom_url.clone(),
                                     prompt_text.clone(),
                                     temperature,
-                                ).await;
+                                )
+                                .await;
                                 match result {
                                     Ok(output) => {
                                         let status = if output.error.is_empty() {
@@ -620,7 +770,10 @@ pub fn AppLayout() -> impl IntoView {
                                             crate::components::execution_engine::TaskStatus::Error
                                         };
                                         let trace_msg = if output.error.is_empty() {
-                                            format!("LLM result: {} ({} tokens)", output.text, output.tokens_used)
+                                            format!(
+                                                "LLM result: {} ({} tokens)",
+                                                output.text, output.tokens_used
+                                            )
                                         } else {
                                             format!("LLM error: {}", output.error)
                                         };
@@ -661,11 +814,17 @@ pub fn AppLayout() -> impl IntoView {
                                 r#"{"format":"openai","model_name":"","api_key":"","custom_url":""}"#.to_string()
                             };
                             task.status = crate::components::execution_engine::TaskStatus::Complete;
-                            task.add_message("Model Config node", crate::components::execution_engine::TraceLevel::Info);
+                            task.add_message(
+                                "Model Config node",
+                                crate::components::execution_engine::TraceLevel::Info,
+                            );
                             config_json
                         }
                         _ => {
-                            task.add_message(&format!("{} executed", node.label), crate::components::execution_engine::TraceLevel::Info);
+                            task.add_message(
+                                &format!("{} executed", node.label),
+                                crate::components::execution_engine::TraceLevel::Info,
+                            );
                             upstream.values().next().cloned().unwrap_or_default()
                         }
                     };
@@ -674,7 +833,8 @@ pub fn AppLayout() -> impl IntoView {
                         task.result = Some(result.clone());
                         node_results.insert(exec_node_id, result.clone());
 
-                        task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
+                        task.finished_at =
+                            Some(crate::components::execution_engine::Timestamp::now());
                         task.status = crate::components::execution_engine::TaskStatus::Complete;
                         exec.tasks.push(task);
                     }
@@ -743,7 +903,10 @@ pub fn AppLayout() -> impl IntoView {
 
             // Handle double-click: pin the pending preview tab
             if is_double_click {
-                if let Some(idx) = tabs.iter().position(|t| t.node_id == node_id && t.is_preview) {
+                if let Some(idx) = tabs
+                    .iter()
+                    .position(|t| t.node_id == node_id && t.is_preview)
+                {
                     set_inspector_tabs.update(|tabs| {
                         if let Some(tab) = tabs.get_mut(idx) {
                             tab.is_preview = false;
@@ -761,9 +924,9 @@ pub fn AppLayout() -> impl IntoView {
             }
 
             // Check if we should replace the current preview tab
-            let should_replace_preview = active_inspector_tab.get().map_or(false, |idx| {
-                tabs.get(idx).map_or(false, |t| t.is_preview)
-            });
+            let should_replace_preview = active_inspector_tab
+                .get()
+                .map_or(false, |idx| tabs.get(idx).map_or(false, |t| t.is_preview));
 
             if should_replace_preview {
                 // Replace current preview tab
@@ -858,11 +1021,12 @@ pub fn AppLayout() -> impl IntoView {
         let next_connection_id = next_connection_id.clone();
         let add_toast = add_toast.clone();
         Callback::new(move |selection: SavedSelection| {
-            let (new_nodes, new_conns, next_id, next_conn) = crate::components::save_load::load_selection(
-                selection,
-                next_node_id.get(),
-                next_connection_id.get(),
-            );
+            let (new_nodes, new_conns, next_id, next_conn) =
+                crate::components::save_load::load_selection(
+                    selection,
+                    next_node_id.get(),
+                    next_connection_id.get(),
+                );
             set_nodes.update(|n| n.extend(new_nodes));
             set_connections.update(|c| c.extend(new_conns));
             set_next_node_id.set(next_id);

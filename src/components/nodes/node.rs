@@ -1,11 +1,15 @@
+use crate::components::canvas::state::{NodeVariant, PortDirection, PortType, PortWithOffset};
 use leptos::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen::JsCast;
-use crate::components::canvas::state::{PortWithOffset, PortDirection, PortType, NodeVariant};
 
 /// Renders variant-specific body content for a node
-fn render_variant_body(variant: &NodeVariant, node_id: u32, on_text_change: &Option<Callback<(u32, String)>>) -> impl IntoView {
+fn render_variant_body(
+    variant: &NodeVariant,
+    node_id: u32,
+    on_text_change: &Option<Callback<(u32, String)>>,
+) -> impl IntoView {
     match variant {
         NodeVariant::UserInput { text } => {
             let cb = on_text_change.clone();
@@ -214,7 +218,8 @@ pub fn GraphNode(
     #[prop(default = None)] on_text_change: Option<Callback<(u32, String)>>,
     /// Callback when node is right-clicked for inspection
     /// Args: (node_id, is_double_click)
-    #[prop(default = None)] on_node_right_click: Option<Callback<(u32, bool)>>,
+    #[prop(default = None)]
+    on_node_right_click: Option<Callback<(u32, bool)>>,
 ) -> impl IntoView {
     let class = if selected { "node selected" } else { "node" };
     let class = if is_deleting {
@@ -229,8 +234,14 @@ pub fn GraphNode(
     // Calculate content offset based on number of ports
     // Ports are at: 50px, 75px, 100px, 125px... (FIRST_PORT_OFFSET + i * PORT_SPACING)
     // Content should start below the last port's bottom edge plus a buffer
-    let in_count = ports.iter().filter(|p| p.port.direction == PortDirection::In).count();
-    let out_count = ports.iter().filter(|p| p.port.direction == PortDirection::Out).count();
+    let in_count = ports
+        .iter()
+        .filter(|p| p.port.direction == PortDirection::In)
+        .count();
+    let out_count = ports
+        .iter()
+        .filter(|p| p.port.direction == PortDirection::Out)
+        .count();
     let max_ports = in_count.max(out_count);
     let content_offset = (max_ports + 1) as f64 * 25.0;
 
@@ -243,7 +254,8 @@ pub fn GraphNode(
     let handle_output_mousedown = move |ev: web_sys::MouseEvent| {
         ev.prevent_default();
         // Extract port_name from the DOM element's data attribute
-        let port_name = ev.target()
+        let port_name = ev
+            .target()
             .and_then(|t| {
                 let element: Result<web_sys::Element, _> = t.dyn_into();
                 element.ok()
@@ -251,7 +263,12 @@ pub fn GraphNode(
             .and_then(|el: web_sys::Element| el.get_attribute("data-port-name"))
             .unwrap_or_else(|| "output".to_string());
         if let Some(cb) = &on_output_drag_start {
-            cb.run((node_id, port_name, ev.client_x() as f64, ev.client_y() as f64));
+            cb.run((
+                node_id,
+                port_name,
+                ev.client_x() as f64,
+                ev.client_y() as f64,
+            ));
         }
     };
 

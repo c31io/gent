@@ -1,6 +1,6 @@
-use leptos::prelude::*;
-use crate::components::canvas::state::{SavedSelection, BundledGroup};
+use crate::components::canvas::state::{BundledGroup, SavedSelection};
 use crate::components::graph_section::GraphSection;
+use leptos::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Tab {
@@ -142,7 +142,10 @@ pub const NODE_TYPES: &[NodeType] = &[
 ];
 
 fn get_nodes_by_category(category: &str) -> Vec<&'static NodeType> {
-    NODE_TYPES.iter().filter(|n| n.category == category).collect()
+    NODE_TYPES
+        .iter()
+        .filter(|n| n.category == category)
+        .collect()
 }
 
 #[component]
@@ -174,7 +177,8 @@ fn TabBar(active_tab: ReadSignal<Tab>, set_active_tab: WriteSignal<Tab>) -> impl
 #[component]
 pub fn LeftPanel(
     /// Callback when drag starts from palette
-    #[prop(default = None)] on_drag_start: Option<Callback<String>>,
+    #[prop(default = None)]
+    on_drag_start: Option<Callback<String>>,
     /// Saved selections signal (ReadSignal<Vec<SavedSelection>>)
     saved_selections: Signal<Vec<SavedSelection>>,
     /// Callback when a saved selection is loaded
@@ -215,34 +219,38 @@ pub fn PaletteSection(
     category: &'static str,
     nodes: Vec<&'static NodeType>,
     /// Callback when drag starts from palette
-    #[prop(default = None)] on_drag_start: Option<Callback<String>>,
+    #[prop(default = None)]
+    on_drag_start: Option<Callback<String>>,
 ) -> impl IntoView {
-    let items: Vec<_> = nodes.iter().map(|node| {
-        let node_id = node.id;
-        view! {
-            <div
-                class="palette-item"
-                data-node-type={node.id}
-                title={node.description}
-                on:mousedown={move |_ev| {
-                    // Store in window for canvas to pick up
-                    if let Some(window) = web_sys::window() {
-                        let _ = js_sys::Reflect::set(
-                            &window,
-                            &"draggedNodeType".into(),
-                            &node_id.into()
-                        );
-                    }
-                    // Also call the callback if provided
-                    if let Some(callback) = &on_drag_start {
-                        callback.run(node_id.to_string());
-                    }
-                }}
-            >
-                {node.name}
-            </div>
-        }
-    }).collect();
+    let items: Vec<_> = nodes
+        .iter()
+        .map(|node| {
+            let node_id = node.id;
+            view! {
+                <div
+                    class="palette-item"
+                    data-node-type={node.id}
+                    title={node.description}
+                    on:mousedown={move |_ev| {
+                        // Store in window for canvas to pick up
+                        if let Some(window) = web_sys::window() {
+                            let _ = js_sys::Reflect::set(
+                                &window,
+                                &"draggedNodeType".into(),
+                                &node_id.into()
+                            );
+                        }
+                        // Also call the callback if provided
+                        if let Some(callback) = &on_drag_start {
+                            callback.run(node_id.to_string());
+                        }
+                    }}
+                >
+                    {node.name}
+                </div>
+            }
+        })
+        .collect();
 
     view! {
         <div class="palette-section">

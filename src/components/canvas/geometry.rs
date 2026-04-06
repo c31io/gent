@@ -30,7 +30,9 @@ pub fn is_text_input(ev: &web_sys::MouseEvent) -> bool {
             let mut current: Option<web_sys::Element> = Some(element);
             while let Some(el) = current {
                 let class_name = el.class_name();
-                if class_name.contains("node-variant-input") || class_name.contains("node-variant-textarea") {
+                if class_name.contains("node-variant-input")
+                    || class_name.contains("node-variant-textarea")
+                {
                     return true;
                 }
                 current = el.parent_element();
@@ -53,7 +55,9 @@ pub fn is_text_input_keyboard(ev: &web_sys::KeyboardEvent) -> bool {
             let mut current: Option<web_sys::Element> = Some(element);
             while let Some(el) = current {
                 let class_name = el.class_name();
-                if class_name.contains("node-variant-input") || class_name.contains("node-variant-textarea") {
+                if class_name.contains("node-variant-input")
+                    || class_name.contains("node-variant-textarea")
+                {
                     return true;
                 }
                 current = el.parent_element();

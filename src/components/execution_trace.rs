@@ -1,5 +1,5 @@
+use crate::components::execution_engine::{ExecutionState, Timestamp, TraceLevel};
 use leptos::prelude::*;
-use crate::components::execution_engine::{ExecutionState, TraceLevel, Timestamp};
 
 /// Format duration in milliseconds
 fn format_duration(ms: u128) -> String {
@@ -42,9 +42,7 @@ fn status_class(status: &crate::components::execution_engine::TaskStatus) -> &'s
 }
 
 #[component]
-pub fn ExecutionTrace(
-    execution: Signal<ExecutionState>,
-) -> impl IntoView {
+pub fn ExecutionTrace(execution: Signal<ExecutionState>) -> impl IntoView {
     view! {
         <div class="execution-trace">
             <div class="panel-content trace-content">

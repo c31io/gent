@@ -18,10 +18,7 @@ pub struct Toast {
 
 /// Toast container component
 #[component]
-pub fn ToastContainer(
-    toasts: Signal<Vec<Toast>>,
-    on_dismiss: Callback<u32>,
-) -> impl IntoView {
+pub fn ToastContainer(toasts: Signal<Vec<Toast>>, on_dismiss: Callback<u32>) -> impl IntoView {
     view! {
         <div class="toast-container">
             {move || {

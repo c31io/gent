@@ -19,8 +19,8 @@ pub enum PortType {
 /// Model node configuration
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ModelConfig {
-    pub format: String,       // "openai" | "anthropic"
-    pub model_name: String,  // e.g., "gpt-4o-mini", "claude-3-5-sonnet-latest"
+    pub format: String,     // "openai" | "anthropic"
+    pub model_name: String, // e.g., "gpt-4o-mini", "claude-3-5-sonnet-latest"
     pub api_key: String,
     pub custom_url: String,
 }
@@ -43,23 +43,51 @@ pub struct PortWithOffset {
 /// Variants for different node types with their specific data
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum NodeVariant {
-    UserInput { text: String },
-    FileInput { path: String },
+    UserInput {
+        text: String,
+    },
+    FileInput {
+        path: String,
+    },
     Trigger,
-    Template { template: String },
-    Retrieval { query: String },
-    Summarizer { max_length: u32 },
-    PlannerAgent { goal: String },
-    ExecutorAgent { task: String },
-    WebSearch { query: String, num_results: u32 },
-    CodeExecute { code: String, language: String },
-    IfCondition { branches: u32 },
-    Loop { iterations: u32 },
-    ChatOutput { response: String },
-    JsonOutput { schema: String },
+    Template {
+        template: String,
+    },
+    Retrieval {
+        query: String,
+    },
+    Summarizer {
+        max_length: u32,
+    },
+    PlannerAgent {
+        goal: String,
+    },
+    ExecutorAgent {
+        task: String,
+    },
+    WebSearch {
+        query: String,
+        num_results: u32,
+    },
+    CodeExecute {
+        code: String,
+        language: String,
+    },
+    IfCondition {
+        branches: u32,
+    },
+    Loop {
+        iterations: u32,
+    },
+    ChatOutput {
+        response: String,
+    },
+    JsonOutput {
+        schema: String,
+    },
     ModelConfig {
-        format: String,       // "openai" | "anthropic"
-        model_name: String,  // e.g., "gpt-4o-mini", "claude-3-5-sonnet-latest"
+        format: String,     // "openai" | "anthropic"
+        model_name: String, // e.g., "gpt-4o-mini", "claude-3-5-sonnet-latest"
         api_key: String,
         custom_url: String,
     },
@@ -116,69 +144,227 @@ pub struct DraggingConnection {
 pub fn default_ports_for_type(node_type: &str) -> Vec<Port> {
     match node_type {
         "user_input" => vec![
-            Port { name: "trigger".into(), port_type: PortType::Trigger, direction: PortDirection::In },
-            Port { name: "output".into(), port_type: PortType::Text, direction: PortDirection::Out },
+            Port {
+                name: "trigger".into(),
+                port_type: PortType::Trigger,
+                direction: PortDirection::In,
+            },
+            Port {
+                name: "output".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::Out,
+            },
         ],
-        "file_input" => vec![Port { name: "output".into(), port_type: PortType::File, direction: PortDirection::Out }],
-        "image_input" => vec![Port { name: "output".into(), port_type: PortType::Image, direction: PortDirection::Out }],
-        "audio_input" => vec![Port { name: "output".into(), port_type: PortType::Audio, direction: PortDirection::Out }],
-        "trigger" => vec![Port { name: "output".into(), port_type: PortType::Trigger, direction: PortDirection::Out }],
+        "file_input" => vec![Port {
+            name: "output".into(),
+            port_type: PortType::File,
+            direction: PortDirection::Out,
+        }],
+        "image_input" => vec![Port {
+            name: "output".into(),
+            port_type: PortType::Image,
+            direction: PortDirection::Out,
+        }],
+        "audio_input" => vec![Port {
+            name: "output".into(),
+            port_type: PortType::Audio,
+            direction: PortDirection::Out,
+        }],
+        "trigger" => vec![Port {
+            name: "output".into(),
+            port_type: PortType::Trigger,
+            direction: PortDirection::Out,
+        }],
         "template" => vec![
-            Port { name: "input".into(), port_type: PortType::Text, direction: PortDirection::In },
-            Port { name: "output".into(), port_type: PortType::Text, direction: PortDirection::Out },
+            Port {
+                name: "input".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::In,
+            },
+            Port {
+                name: "output".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::Out,
+            },
         ],
         "retrieval" => vec![
-            Port { name: "query".into(), port_type: PortType::Text, direction: PortDirection::In },
-            Port { name: "result".into(), port_type: PortType::Embeddings, direction: PortDirection::Out },
+            Port {
+                name: "query".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::In,
+            },
+            Port {
+                name: "result".into(),
+                port_type: PortType::Embeddings,
+                direction: PortDirection::Out,
+            },
         ],
         "summarizer" => vec![
-            Port { name: "input".into(), port_type: PortType::Text, direction: PortDirection::In },
-            Port { name: "output".into(), port_type: PortType::Text, direction: PortDirection::Out },
+            Port {
+                name: "input".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::In,
+            },
+            Port {
+                name: "output".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::Out,
+            },
         ],
         "planner_agent" => vec![
-            Port { name: "goal".into(), port_type: PortType::Text, direction: PortDirection::In },
-            Port { name: "context".into(), port_type: PortType::Text, direction: PortDirection::In },
-            Port { name: "plan".into(), port_type: PortType::Text, direction: PortDirection::Out },
-            Port { name: "next".into(), port_type: PortType::Trigger, direction: PortDirection::Out },
+            Port {
+                name: "goal".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::In,
+            },
+            Port {
+                name: "context".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::In,
+            },
+            Port {
+                name: "plan".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::Out,
+            },
+            Port {
+                name: "next".into(),
+                port_type: PortType::Trigger,
+                direction: PortDirection::Out,
+            },
         ],
         "executor_agent" => vec![
-            Port { name: "task".into(), port_type: PortType::Text, direction: PortDirection::In },
-            Port { name: "context".into(), port_type: PortType::Text, direction: PortDirection::In },
-            Port { name: "result".into(), port_type: PortType::Text, direction: PortDirection::Out },
-            Port { name: "done".into(), port_type: PortType::Trigger, direction: PortDirection::Out },
+            Port {
+                name: "task".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::In,
+            },
+            Port {
+                name: "context".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::In,
+            },
+            Port {
+                name: "result".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::Out,
+            },
+            Port {
+                name: "done".into(),
+                port_type: PortType::Trigger,
+                direction: PortDirection::Out,
+            },
         ],
         "web_search" => vec![
-            Port { name: "query".into(), port_type: PortType::Text, direction: PortDirection::In },
-            Port { name: "results".into(), port_type: PortType::Text, direction: PortDirection::Out },
+            Port {
+                name: "query".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::In,
+            },
+            Port {
+                name: "results".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::Out,
+            },
         ],
         "code_execute" => vec![
-            Port { name: "code".into(), port_type: PortType::Text, direction: PortDirection::In },
-            Port { name: "output".into(), port_type: PortType::Text, direction: PortDirection::Out },
-            Port { name: "error".into(), port_type: PortType::Text, direction: PortDirection::Out },
+            Port {
+                name: "code".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::In,
+            },
+            Port {
+                name: "output".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::Out,
+            },
+            Port {
+                name: "error".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::Out,
+            },
         ],
         "if_condition" => vec![
-            Port { name: "condition".into(), port_type: PortType::Text, direction: PortDirection::In },
+            Port {
+                name: "condition".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::In,
+            },
             // Outputs added dynamically based on branches count
         ],
         "loop" => vec![
-            Port { name: "input".into(), port_type: PortType::Text, direction: PortDirection::In },
-            Port { name: "iteration".into(), port_type: PortType::Text, direction: PortDirection::Out },
-            Port { name: "done".into(), port_type: PortType::Trigger, direction: PortDirection::Out },
+            Port {
+                name: "input".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::In,
+            },
+            Port {
+                name: "iteration".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::Out,
+            },
+            Port {
+                name: "done".into(),
+                port_type: PortType::Trigger,
+                direction: PortDirection::Out,
+            },
         ],
-        "chat_output" => vec![Port { name: "response".into(), port_type: PortType::Text, direction: PortDirection::In }],
-        "json_output" => vec![Port { name: "data".into(), port_type: PortType::Text, direction: PortDirection::In }],
-        "model_config" => vec![
-            Port { name: "config".into(), port_type: PortType::Text, direction: PortDirection::Out },
-        ],
+        "chat_output" => vec![Port {
+            name: "response".into(),
+            port_type: PortType::Text,
+            direction: PortDirection::In,
+        }],
+        "json_output" => vec![Port {
+            name: "data".into(),
+            port_type: PortType::Text,
+            direction: PortDirection::In,
+        }],
+        "model_config" => vec![Port {
+            name: "config".into(),
+            port_type: PortType::Text,
+            direction: PortDirection::Out,
+        }],
         "model" => vec![
-            Port { name: "config".into(), port_type: PortType::Text, direction: PortDirection::In },
-            Port { name: "prompt".into(), port_type: PortType::Text, direction: PortDirection::In },
-            Port { name: "temperature".into(), port_type: PortType::Text, direction: PortDirection::In },
-            Port { name: "text".into(), port_type: PortType::Text, direction: PortDirection::Out },
-            Port { name: "tokens_used".into(), port_type: PortType::Text, direction: PortDirection::Out },
-            Port { name: "model".into(), port_type: PortType::Text, direction: PortDirection::Out },
-            Port { name: "finish_reason".into(), port_type: PortType::Text, direction: PortDirection::Out },
-            Port { name: "error".into(), port_type: PortType::Text, direction: PortDirection::Out },
+            Port {
+                name: "config".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::In,
+            },
+            Port {
+                name: "prompt".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::In,
+            },
+            Port {
+                name: "temperature".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::In,
+            },
+            Port {
+                name: "text".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::Out,
+            },
+            Port {
+                name: "tokens_used".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::Out,
+            },
+            Port {
+                name: "model".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::Out,
+            },
+            Port {
+                name: "finish_reason".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::Out,
+            },
+            Port {
+                name: "error".into(),
+                port_type: PortType::Text,
+                direction: PortDirection::Out,
+            },
         ],
         _ => vec![],
     }
@@ -220,8 +406,14 @@ const FIRST_PORT_OFFSET: f64 = 50.0;
 
 /// Compute vertical offsets for ports, stacking them vertically using fixed pixel positions
 pub fn compute_port_offsets(ports: &[Port]) -> Vec<PortWithOffset> {
-    let in_ports: Vec<_> = ports.iter().filter(|p| p.direction == PortDirection::In).collect();
-    let out_ports: Vec<_> = ports.iter().filter(|p| p.direction == PortDirection::Out).collect();
+    let in_ports: Vec<_> = ports
+        .iter()
+        .filter(|p| p.direction == PortDirection::In)
+        .collect();
+    let out_ports: Vec<_> = ports
+        .iter()
+        .filter(|p| p.direction == PortDirection::Out)
+        .collect();
 
     let mut result = Vec::new();
 
@@ -272,22 +464,48 @@ pub fn get_port_canvas_position(
 /// Returns default NodeVariant for a given node_type string
 pub fn default_variant_for_type(node_type: &str) -> NodeVariant {
     match node_type {
-        "user_input" => NodeVariant::UserInput { text: String::new() },
-        "file_input" => NodeVariant::FileInput { path: String::new() },
-        "image_input" => NodeVariant::FileInput { path: String::new() },
-        "audio_input" => NodeVariant::FileInput { path: String::new() },
+        "user_input" => NodeVariant::UserInput {
+            text: String::new(),
+        },
+        "file_input" => NodeVariant::FileInput {
+            path: String::new(),
+        },
+        "image_input" => NodeVariant::FileInput {
+            path: String::new(),
+        },
+        "audio_input" => NodeVariant::FileInput {
+            path: String::new(),
+        },
         "trigger" => NodeVariant::Trigger,
-        "template" => NodeVariant::Template { template: String::new() },
-        "retrieval" => NodeVariant::Retrieval { query: String::new() },
+        "template" => NodeVariant::Template {
+            template: String::new(),
+        },
+        "retrieval" => NodeVariant::Retrieval {
+            query: String::new(),
+        },
         "summarizer" => NodeVariant::Summarizer { max_length: 500 },
-        "planner_agent" => NodeVariant::PlannerAgent { goal: String::new() },
-        "executor_agent" => NodeVariant::ExecutorAgent { task: String::new() },
-        "web_search" => NodeVariant::WebSearch { query: String::new(), num_results: 5 },
-        "code_execute" => NodeVariant::CodeExecute { code: String::new(), language: "python".into() },
+        "planner_agent" => NodeVariant::PlannerAgent {
+            goal: String::new(),
+        },
+        "executor_agent" => NodeVariant::ExecutorAgent {
+            task: String::new(),
+        },
+        "web_search" => NodeVariant::WebSearch {
+            query: String::new(),
+            num_results: 5,
+        },
+        "code_execute" => NodeVariant::CodeExecute {
+            code: String::new(),
+            language: "python".into(),
+        },
         "if_condition" => NodeVariant::IfCondition { branches: 2 },
         "loop" => NodeVariant::Loop { iterations: 3 },
-        "chat_output" => NodeVariant::ChatOutput { response: String::new() },
-        "json_output" => NodeVariant::JsonOutput { schema: String::new() },
+        "chat_output" => NodeVariant::ChatOutput {
+            response: String::new(),
+        },
+        "json_output" => NodeVariant::JsonOutput {
+            schema: String::new(),
+        },
         "model" => NodeVariant::Model,
         "model_config" => NodeVariant::ModelConfig {
             format: "openai".into(),
@@ -302,9 +520,9 @@ pub fn default_variant_for_type(node_type: &str) -> NodeVariant {
 /// A saved selection of nodes and connections for reuse
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct SavedSelection {
-    pub id: String,           // UUID
-    pub name: String,         // User-provided name
-    pub created_at: f64,      // js_sys::Date::now() timestamp
+    pub id: String,            // UUID
+    pub name: String,          // User-provided name
+    pub created_at: f64,       // js_sys::Date::now() timestamp
     pub nodes: Vec<NodeState>, // Full node data
     pub connections: Vec<ConnectionState>,
 }

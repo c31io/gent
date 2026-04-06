@@ -1,5 +1,5 @@
-use leptos::prelude::*;
 use crate::components::canvas::state::{NodeState, NodeVariant};
+use leptos::prelude::*;
 
 /// A tab in the inspector panel
 #[derive(Clone, Debug)]

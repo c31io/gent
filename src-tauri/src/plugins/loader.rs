@@ -1,8 +1,8 @@
 use crate::plugins::capabilities::Capability;
 use crate::plugins::errors::PluginError;
 use crate::plugins::plugin::Plugin;
-use crate::plugins::{WasmPluginLoader, PluginSource};
 use crate::plugins::rune_loader::RunePluginLoader;
+use crate::plugins::{PluginSource, WasmPluginLoader};
 use std::sync::Arc;
 
 /// Registry of plugin source loaders for general plugin loading
@@ -47,4 +47,3 @@ impl Default for PluginLoader {
         Self::new()
     }
 }
-

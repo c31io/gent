@@ -47,8 +47,8 @@ pub struct RunResult {
 async fn list_scripts() -> Result<Vec<ScriptInfo>, String> {
     let opts = js_sys::Object::new();
     let js_value = tauri_invoke::invoke("list_scripts".into(), &opts).await?;
-    let scripts: Vec<ScriptInfo> = serde_wasm_bindgen::from_value(js_value)
-        .map_err(|e| format!("deser error: {:?}", e))?;
+    let scripts: Vec<ScriptInfo> =
+        serde_wasm_bindgen::from_value(js_value).map_err(|e| format!("deser error: {:?}", e))?;
     Ok(scripts)
 }
 
@@ -60,9 +60,11 @@ async fn read_script(id: String) -> Result<String, String> {
     let js_value = tauri_invoke::invoke("read_script".into(), &opts).await?;
 
     #[derive(serde::Deserialize)]
-    struct Content { source: String }
-    let content: Content = serde_wasm_bindgen::from_value(js_value)
-        .map_err(|e| format!("deser error: {:?}", e))?;
+    struct Content {
+        source: String,
+    }
+    let content: Content =
+        serde_wasm_bindgen::from_value(js_value).map_err(|e| format!("deser error: {:?}", e))?;
     Ok(content.source)
 }
 
@@ -86,8 +88,8 @@ async fn run_script(id: String) -> Result<RunResult, String> {
     js_sys::Reflect::set(&opts, &"input".into(), &empty_input)
         .map_err(|e| format!("set error: {:?}", e))?;
     let js_value = tauri_invoke::invoke("run_script".into(), &opts).await?;
-    let result: RunResult = serde_wasm_bindgen::from_value(js_value)
-        .map_err(|e| format!("deser error: {:?}", e))?;
+    let result: RunResult =
+        serde_wasm_bindgen::from_value(js_value).map_err(|e| format!("deser error: {:?}", e))?;
     Ok(result)
 }
 
@@ -158,13 +160,14 @@ pub fn ScriptEditor() -> impl IntoView {
             let args = js_sys::Array::new();
             args.push(&"script-console-line".into());
 
-            let promise: js_sys::Promise = match js_sys::Reflect::apply(&listen_fn.into(), &event, &args) {
-                Ok(p) => match p.dyn_into::<js_sys::Promise>() {
-                    Ok(p) => p,
+            let promise: js_sys::Promise =
+                match js_sys::Reflect::apply(&listen_fn.into(), &event, &args) {
+                    Ok(p) => match p.dyn_into::<js_sys::Promise>() {
+                        Ok(p) => p,
+                        Err(_) => return,
+                    },
                     Err(_) => return,
-                },
-                Err(_) => return,
-            };
+                };
 
             let _unlisten: JsValue = match JsFuture::from(promise).await {
                 Ok(v) => v,
@@ -180,7 +183,8 @@ pub fn ScriptEditor() -> impl IntoView {
                         lines.push(cl);
                     });
                 }
-            }) as Box<dyn FnMut(JsValue)>);
+            })
+                as Box<dyn FnMut(JsValue)>);
             cb.forget();
 
             set_console_lines.update(|lines| {
@@ -200,7 +204,9 @@ pub fn ScriptEditor() -> impl IntoView {
         let set_error = set_error.clone();
         let set_console_lines = set_console_lines.clone();
         move |_| {
-            let Some(script) = selected_script.get() else { return };
+            let Some(script) = selected_script.get() else {
+                return;
+            };
             set_running.set(true);
             set_console_lines.set(Vec::new());
 
@@ -238,7 +244,9 @@ pub fn ScriptEditor() -> impl IntoView {
         let set_error = set_error.clone();
         let editor_content = editor_content.clone();
         move |_| {
-            let Some(script) = selected_script.get() else { return };
+            let Some(script) = selected_script.get() else {
+                return;
+            };
             let content = editor_content.get();
             spawn_local({
                 let set_error = set_error.clone();
@@ -274,10 +282,16 @@ pub fn ScriptEditor() -> impl IntoView {
                             // Update CodeMirror with new script content
                             if editor_ready.get() {
                                 if let Some(editor) = codemirror_editor.get() {
-                                    if let Ok(set_value) = js_sys::Reflect::get(&editor, &"setValue".into()) {
+                                    if let Ok(set_value) =
+                                        js_sys::Reflect::get(&editor, &"setValue".into())
+                                    {
                                         let args = js_sys::Array::new();
                                         args.push(&source.into());
-                                        let _ = js_sys::Reflect::apply(&set_value.into(), &editor, &args);
+                                        let _ = js_sys::Reflect::apply(
+                                            &set_value.into(),
+                                            &editor,
+                                            &args,
+                                        );
                                     }
                                 }
                             } else {
@@ -350,7 +364,8 @@ pub fn ScriptEditor() -> impl IntoView {
             };
 
             let options = js_sys::Object::new();
-            let _ = js_sys::Reflect::set(&options, &"value".into(), &initial_content.clone().into());
+            let _ =
+                js_sys::Reflect::set(&options, &"value".into(), &initial_content.clone().into());
             let _ = js_sys::Reflect::set(&options, &"mode".into(), &"rust".into());
             let _ = js_sys::Reflect::set(&options, &"theme".into(), &"dracula".into());
             let _ = js_sys::Reflect::set(&options, &"lineNumbers".into(), &true.into());
@@ -363,7 +378,11 @@ pub fn ScriptEditor() -> impl IntoView {
             args.push(&container.into());
             args.push(&options);
 
-            let editor = match js_sys::Reflect::apply(&codemirror.into(), &wasm_bindgen::JsValue::UNDEFINED, &args) {
+            let editor = match js_sys::Reflect::apply(
+                &codemirror.into(),
+                &wasm_bindgen::JsValue::UNDEFINED,
+                &args,
+            ) {
                 Ok(e) => match e.dyn_into::<js_sys::Object>() {
                     Ok(obj) => obj,
                     Err(_) => return,
@@ -379,15 +398,24 @@ pub fn ScriptEditor() -> impl IntoView {
             if let Ok(on_fn) = js_sys::Reflect::get(&editor, &"on".into()) {
                 let set_editor_content = set_editor_content.clone();
                 let editor_clone = editor.clone();
-                let callback = wasm_bindgen::closure::Closure::wrap(Box::new(move |_cm: JsValue, _change_obj: JsValue| {
-                    if let Ok(get_value) = js_sys::Reflect::get(&editor_clone, &"getValue".into()) {
-                        if let Ok(value) = js_sys::Reflect::apply(&get_value.into(), &editor_clone, &js_sys::Array::new()) {
-                            if let Some(s) = value.as_string() {
-                                set_editor_content.set(s);
+                let callback = wasm_bindgen::closure::Closure::wrap(Box::new(
+                    move |_cm: JsValue, _change_obj: JsValue| {
+                        if let Ok(get_value) =
+                            js_sys::Reflect::get(&editor_clone, &"getValue".into())
+                        {
+                            if let Ok(value) = js_sys::Reflect::apply(
+                                &get_value.into(),
+                                &editor_clone,
+                                &js_sys::Array::new(),
+                            ) {
+                                if let Some(s) = value.as_string() {
+                                    set_editor_content.set(s);
+                                }
                             }
                         }
-                    }
-                }) as Box<dyn FnMut(JsValue, JsValue)>);
+                    },
+                )
+                    as Box<dyn FnMut(JsValue, JsValue)>);
                 let on_args = js_sys::Array::new();
                 on_args.push(&"change".into());
                 on_args.push(&callback.as_js_value());
@@ -398,110 +426,110 @@ pub fn ScriptEditor() -> impl IntoView {
     });
 
     view! {
-        <div
-            class="script-editor"
-            on:mousemove={handle_editor_mousemove}
-            on:mouseup={handle_mouse_up}
-            on:mouseleave={handle_editor_mouseleave}
-        >
-            {move || {
-                if loading.get() {
-                    view! { <p>"Loading scripts..."</p> }.into_any()
-                } else if let Some(err) = error.get() {
-                    view! { <p class="error">{err}</p> }.into_any()
-                } else {
-                    view! {
-                        <>
-                            {/* Script selector dropdown */}
-                            <div class="script-selector">
-                                <select
-                                    class="script-select"
-                                    on:change={move |ev| {
-                                        let id = event_target_value(&ev);
-                                        handle_select(id);
-                                    }}
-                                >
-                                    <option value="" disabled=true selected={selected_script.get().is_none()}>
-                                        "Select a script..."
-                                    </option>
-                                    {scripts.get().iter().map(|s| {
-                                        let is_selected = selected_script.get().as_ref().map(|sel| sel.id == s.id).unwrap_or(false);
-                                        view! {
-                                            <option
-                                                value={s.id.clone()}
-                                                selected={is_selected}
-                                            >
-                                                {format!("[{}] {}", s.origin, s.name)}
-                                            </option>
-                                        }
-                                    }).collect::<Vec<_>>()}
-                                </select>
-                            </div>
-
-                            {/* Code editor container for CodeMirror */}
-                            <div
-                                class="script-editor-area"
-                                style:height={move || format!("{}px", editor_height.get())}
-                            >
-                                <div
-                                    id="script-codemirror"
-                                    class="codemirror-container"
-                                ></div>
-                            </div>
-
-                            {/* Horizontal resizer */}
-                            <div
-                                class="script-resizer"
-                                on:mousedown={handle_resizer_mouse_down}
-                            ></div>
-
-                            {/* Action buttons */}
-                            <div class="script-actions">
-                                <button
-                                    class="btn-run"
-                                    on:click={handle_run}
-                                    disabled={running.get() || selected_script.get().is_none()}
-                                >
-                                    {if running.get() { "Running..." } else { "Run" }}
-                                </button>
-                                <button
-                                    class="btn-save"
-                                    on:click={handle_save}
-                                    disabled={selected_script.get().is_none()}
-                                >
-                                    "Save"
-                                </button>
-                            </div>
-
-                            {/* Console output */}
-                            <div class="script-console">
-                                <div class="console-header">"Console"</div>
-                                <div class="console-lines">
-                                    {console_lines.get().iter().map(|line| {
-                                        let cls = match line.level {
-    ConsoleLevel::Error => "console-error",
-    ConsoleLevel::Warn => "console-warn",
-    ConsoleLevel::Info => "console-info",
-    ConsoleLevel::Output => "console-info",
-};
-                                        view! {
-                                            <div class={cls}>
-                                                <span class="console-level">{format!("[{}]", match &line.level {
-    ConsoleLevel::Error => "error",
-    ConsoleLevel::Warn => "warn",
-    ConsoleLevel::Info => "info",
-    ConsoleLevel::Output => "output",
-})}</span>
-                                                <span class="console-message">{line.message.clone()}</span>
-                                            </div>
-                                        }.into_any()
-                                    }).collect::<Vec<_>>()}
+            <div
+                class="script-editor"
+                on:mousemove={handle_editor_mousemove}
+                on:mouseup={handle_mouse_up}
+                on:mouseleave={handle_editor_mouseleave}
+            >
+                {move || {
+                    if loading.get() {
+                        view! { <p>"Loading scripts..."</p> }.into_any()
+                    } else if let Some(err) = error.get() {
+                        view! { <p class="error">{err}</p> }.into_any()
+                    } else {
+                        view! {
+                            <>
+                                {/* Script selector dropdown */}
+                                <div class="script-selector">
+                                    <select
+                                        class="script-select"
+                                        on:change={move |ev| {
+                                            let id = event_target_value(&ev);
+                                            handle_select(id);
+                                        }}
+                                    >
+                                        <option value="" disabled=true selected={selected_script.get().is_none()}>
+                                            "Select a script..."
+                                        </option>
+                                        {scripts.get().iter().map(|s| {
+                                            let is_selected = selected_script.get().as_ref().map(|sel| sel.id == s.id).unwrap_or(false);
+                                            view! {
+                                                <option
+                                                    value={s.id.clone()}
+                                                    selected={is_selected}
+                                                >
+                                                    {format!("[{}] {}", s.origin, s.name)}
+                                                </option>
+                                            }
+                                        }).collect::<Vec<_>>()}
+                                    </select>
                                 </div>
-                            </div>
-                        </>
-                    }.into_any()
-                }
-            }}
-        </div>
-    }
+
+                                {/* Code editor container for CodeMirror */}
+                                <div
+                                    class="script-editor-area"
+                                    style:height={move || format!("{}px", editor_height.get())}
+                                >
+                                    <div
+                                        id="script-codemirror"
+                                        class="codemirror-container"
+                                    ></div>
+                                </div>
+
+                                {/* Horizontal resizer */}
+                                <div
+                                    class="script-resizer"
+                                    on:mousedown={handle_resizer_mouse_down}
+                                ></div>
+
+                                {/* Action buttons */}
+                                <div class="script-actions">
+                                    <button
+                                        class="btn-run"
+                                        on:click={handle_run}
+                                        disabled={running.get() || selected_script.get().is_none()}
+                                    >
+                                        {if running.get() { "Running..." } else { "Run" }}
+                                    </button>
+                                    <button
+                                        class="btn-save"
+                                        on:click={handle_save}
+                                        disabled={selected_script.get().is_none()}
+                                    >
+                                        "Save"
+                                    </button>
+                                </div>
+
+                                {/* Console output */}
+                                <div class="script-console">
+                                    <div class="console-header">"Console"</div>
+                                    <div class="console-lines">
+                                        {console_lines.get().iter().map(|line| {
+                                            let cls = match line.level {
+        ConsoleLevel::Error => "console-error",
+        ConsoleLevel::Warn => "console-warn",
+        ConsoleLevel::Info => "console-info",
+        ConsoleLevel::Output => "console-info",
+    };
+                                            view! {
+                                                <div class={cls}>
+                                                    <span class="console-level">{format!("[{}]", match &line.level {
+        ConsoleLevel::Error => "error",
+        ConsoleLevel::Warn => "warn",
+        ConsoleLevel::Info => "info",
+        ConsoleLevel::Output => "output",
+    })}</span>
+                                                    <span class="console-message">{line.message.clone()}</span>
+                                                </div>
+                                            }.into_any()
+                                        }).collect::<Vec<_>>()}
+                                    </div>
+                                </div>
+                            </>
+                        }.into_any()
+                    }
+                }}
+            </div>
+        }
 }

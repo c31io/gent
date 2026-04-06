@@ -49,12 +49,19 @@ pub fn draw_connections(
     ctx.clear_rect(0.0, 0.0, width, height);
 
     // Apply transform for pan/zoom
-    ctx.set_transform(zoom, 0.0, 0.0, zoom, pan_x, pan_y).unwrap_throw();
+    ctx.set_transform(zoom, 0.0, 0.0, zoom, pan_x, pan_y)
+        .unwrap_throw();
 
     // Draw established connections
     for conn in connections {
-        let (sx, sy) = port_positions.get(&(conn.source_node_id, conn.source_port_name.clone())).copied().unwrap_or((0.0, 0.0));
-        let (ex, ey) = port_positions.get(&(conn.target_node_id, conn.target_port_name.clone())).copied().unwrap_or((0.0, 0.0));
+        let (sx, sy) = port_positions
+            .get(&(conn.source_node_id, conn.source_port_name.clone()))
+            .copied()
+            .unwrap_or((0.0, 0.0));
+        let (ex, ey) = port_positions
+            .get(&(conn.target_node_id, conn.target_port_name.clone()))
+            .copied()
+            .unwrap_or((0.0, 0.0));
         let dimmed = rerouting_from == Some(conn.target_node_id);
         draw_bezier(ctx, sx, sy, ex, ey, conn.selected, dimmed);
     }
@@ -62,11 +69,15 @@ pub fn draw_connections(
     // Draw preview connection while dragging
     if let Some(ref dc) = dragging {
         if dc.is_dragging {
-            let (sx, sy) = port_positions.get(&(dc.source_node_id, dc.source_port_name.clone())).copied().unwrap_or((0.0, 0.0));
+            let (sx, sy) = port_positions
+                .get(&(dc.source_node_id, dc.source_port_name.clone()))
+                .copied()
+                .unwrap_or((0.0, 0.0));
             draw_bezier(ctx, sx, sy, dc.current_x, dc.current_y, false, false);
         }
     }
 
     // Reset transform
-    ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0).unwrap_throw();
+    ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+        .unwrap_throw();
 }

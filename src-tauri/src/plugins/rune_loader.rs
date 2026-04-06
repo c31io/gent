@@ -28,9 +28,9 @@ impl Plugin for RuneScriptPlugin {
     }
 
     fn process(&self, input: Input) -> Result<Output, PluginError> {
-        let engine = RUNE_ENGINE.get().ok_or_else(|| {
-            PluginError::Runtime("Rune engine not initialized".into())
-        })?;
+        let engine = RUNE_ENGINE
+            .get()
+            .ok_or_else(|| PluginError::Runtime("Rune engine not initialized".into()))?;
 
         let lines = engine.run(&self.source, input.0)?;
 
@@ -83,12 +83,17 @@ impl super::PluginSource for RunePluginLoader {
         let manifest = Manifest {
             name: String::new(), // Will be set by caller
             version: "0.1.0".into(),
-            description: source.lines().next()
+            description: source
+                .lines()
+                .next()
                 .map(|l| l.trim_start_matches("//").trim().to_string())
                 .unwrap_or_default(),
             capabilities: capabilities.to_vec(),
         };
 
-        Ok(Box::new(RuneScriptPlugin::new(source.to_string(), manifest)))
+        Ok(Box::new(RuneScriptPlugin::new(
+            source.to_string(),
+            manifest,
+        )))
     }
 }

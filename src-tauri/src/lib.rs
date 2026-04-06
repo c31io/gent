@@ -1,10 +1,10 @@
+use crate::plugins::commands::{
+    call_plugin, list_plugins, load_plugin, load_plugin_from_path, unload_plugin, PluginState,
+};
+use crate::plugins::{PluginLoader, PluginRegistry};
+use crate::scripts::commands::{list_scripts, read_script, run_script, save_script};
 use std::process::Command;
 use std::sync::Arc;
-use crate::plugins::{PluginLoader, PluginRegistry};
-use crate::plugins::commands::{
-    call_plugin, list_plugins, load_plugin, load_plugin_from_path, unload_plugin, PluginState
-};
-use crate::scripts::commands::{list_scripts, read_script, save_script, run_script};
 
 mod llm;
 mod plugins;
@@ -27,14 +27,10 @@ fn show_main_window(window: tauri::Window) -> Result<(), String> {
 fn execute_code(code: String) -> Result<String, String> {
     // Run via sh on mac/linux, cmd on windows
     #[cfg(target_os = "windows")]
-    let output = Command::new("cmd")
-        .args(["/C", &code])
-        .output();
+    let output = Command::new("cmd").args(["/C", &code]).output();
 
     #[cfg(not(target_os = "windows"))]
-    let output = Command::new("sh")
-        .args(["-c", &code])
-        .output();
+    let output = Command::new("sh").args(["-c", &code]).output();
 
     match output {
         Ok(out) => {
@@ -51,23 +47,20 @@ fn execute_code(code: String) -> Result<String, String> {
 #[tauri::command]
 async fn import_graph(path: String) -> Result<String, String> {
     use std::fs;
-    fs::read_to_string(&path)
-        .map_err(|e| format!("failed to read file: {}", e))
+    fs::read_to_string(&path).map_err(|e| format!("failed to read file: {}", e))
 }
 
 #[tauri::command]
 async fn export_graph(path: String, json: String) -> Result<(), String> {
     use std::fs;
-    fs::write(&path, json)
-        .map_err(|e| format!("failed to write file: {}", e))
+    fs::write(&path, json).map_err(|e| format!("failed to write file: {}", e))
 }
-
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize Rune engine singleton
-    let rune_engine = crate::scripts::engine::RuneEngine::new()
-        .expect("failed to initialize Rune engine");
+    let rune_engine =
+        crate::scripts::engine::RuneEngine::new().expect("failed to initialize Rune engine");
     crate::scripts::engine::RUNE_ENGINE
         .set(Arc::new(rune_engine))
         .expect("Rune engine already initialized");

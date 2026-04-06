@@ -67,7 +67,7 @@ pub struct Task {
     pub parent_id: Option<String>,
     pub messages: Vec<TraceEntry>,
     pub result: Option<String>,
-    pub waiting_on: Option<u32>,  // node_id we're waiting for
+    pub waiting_on: Option<u32>, // node_id we're waiting for
 }
 
 impl Task {
@@ -108,7 +108,10 @@ impl ExecutionState {
 }
 
 /// Find downstream node IDs connected to a node's output
-pub fn get_downstream_nodes(connections: &[super::canvas::state::ConnectionState], node_id: u32) -> Vec<u32> {
+pub fn get_downstream_nodes(
+    connections: &[super::canvas::state::ConnectionState],
+    node_id: u32,
+) -> Vec<u32> {
     connections
         .iter()
         .filter(|c| c.source_node_id == node_id)
@@ -117,7 +120,10 @@ pub fn get_downstream_nodes(connections: &[super::canvas::state::ConnectionState
 }
 
 /// Find upstream node IDs connected to a node's input
-pub fn get_upstream_nodes(connections: &[super::canvas::state::ConnectionState], node_id: u32) -> Vec<u32> {
+pub fn get_upstream_nodes(
+    connections: &[super::canvas::state::ConnectionState],
+    node_id: u32,
+) -> Vec<u32> {
     connections
         .iter()
         .filter(|c| c.target_node_id == node_id)
@@ -146,10 +152,13 @@ pub fn execute_node_sync(
     let result = match node.node_type.as_str() {
         "trigger" => {
             task.add_message("Trigger fired", TraceLevel::Info);
-            None  // Trigger doesn't produce output itself
+            None // Trigger doesn't produce output itself
         }
         "web_search" => {
-            task.add_message("Web Search → { query: 'mock results', results: [] }", TraceLevel::Info);
+            task.add_message(
+                "Web Search → { query: 'mock results', results: [] }",
+                TraceLevel::Info,
+            );
             Some(r#"{"query":"mock results","results":[]}"#.to_string())
         }
         "code_execute" => {
@@ -174,12 +183,19 @@ pub fn execute_node_sync(
             upstream_results.values().next().cloned()
         }
         "chat_output" | "json_output" => {
-            let input = upstream_results.values().next().cloned().unwrap_or_default();
+            let input = upstream_results
+                .values()
+                .next()
+                .cloned()
+                .unwrap_or_default();
             task.add_message(&format!("Output: {}", input), TraceLevel::Info);
             Some(input)
         }
         _ => {
-            task.add_message(&format!("Unknown node type: {}", node.node_type), TraceLevel::Warn);
+            task.add_message(
+                &format!("Unknown node type: {}", node.node_type),
+                TraceLevel::Warn,
+            );
             upstream_results.values().next().cloned()
         }
     };

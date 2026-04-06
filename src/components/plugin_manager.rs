@@ -13,7 +13,10 @@ async fn list_plugins() -> Result<Vec<PluginInfo>, String> {
 }
 
 /// Call Tauri backend to load a plugin from path
-async fn load_plugin_from_path(path: String, capabilities: Vec<String>) -> Result<PluginInfo, String> {
+async fn load_plugin_from_path(
+    path: String,
+    capabilities: Vec<String>,
+) -> Result<PluginInfo, String> {
     let opts = js_sys::Object::new();
     js_sys::Reflect::set(&opts, &"path".into(), &path.into())
         .map_err(|e| format!("set error: {:?}", e))?;
@@ -84,7 +87,9 @@ pub fn PluginManager() -> impl IntoView {
         let plugins = plugins.clone();
         move |_| {
             let plugins_snapshot = plugins.get();
-            let Some(first) = plugins_snapshot.first() else { return };
+            let Some(first) = plugins_snapshot.first() else {
+                return;
+            };
             let plugin_id = first.id.clone();
             let input = js_sys::Object::new();
             let _ = js_sys::Reflect::set(&input, &"test".into(), &"value".into());

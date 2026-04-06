@@ -4,10 +4,10 @@ use std::env;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmConfig {
-    pub format: String,       // "openai" | "anthropic"
-    pub model_name: String,   // e.g., "gpt-4o-mini" — used directly
+    pub format: String,     // "openai" | "anthropic"
+    pub model_name: String, // e.g., "gpt-4o-mini" — used directly
     pub api_key: String,
-    pub custom_url: String,   // custom endpoint base URL (optional, overrides default)
+    pub custom_url: String, // custom endpoint base URL (optional, overrides default)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,12 +41,12 @@ fn resolve_api_key(config: &LlmConfig) -> Result<String, String> {
 #[derive(Debug, Deserialize)]
 struct OpenAiChoice {
     message: OpenAiMessage,
-    finish_reason: Option<String>,  // can be null in edge cases
+    finish_reason: Option<String>, // can be null in edge cases
 }
 
 #[derive(Debug, Deserialize)]
 struct OpenAiMessage {
-    content: Option<String>,  // can be null when content_filter triggers
+    content: Option<String>, // can be null when content_filter triggers
 }
 
 #[derive(Debug, Deserialize)]
@@ -65,7 +65,7 @@ struct OpenAiUsage {
 #[derive(Debug, Deserialize)]
 struct AnthropicContentBlock {
     #[serde(rename = "type")]
-    block_type: String,  // "text" or "thinking"
+    block_type: String, // "text" or "thinking"
     text: Option<String>,
     thinking: Option<String>,
 }
@@ -75,7 +75,7 @@ struct AnthropicResponse {
     model: String,
     content: Vec<AnthropicContentBlock>,
     usage: AnthropicUsage,
-    stop_reason: Option<String>,  // can be null
+    stop_reason: Option<String>, // can be null
 }
 
 #[derive(Debug, Deserialize)]
@@ -104,7 +104,10 @@ pub async fn llm_complete(config: LlmConfig, input: LlmInput) -> LlmOutput {
     match config.format.as_str() {
         "openai" => {
             let url = if !config.custom_url.is_empty() {
-                format!("{}/chat/completions", config.custom_url.trim_end_matches('/'))
+                format!(
+                    "{}/chat/completions",
+                    config.custom_url.trim_end_matches('/')
+                )
             } else {
                 "https://api.openai.com/v1/chat/completions".to_string()
             };
@@ -138,7 +141,11 @@ pub async fn llm_complete(config: LlmConfig, input: LlmInput) -> LlmOutput {
                     }
                     match response.json::<OpenAiResponse>().await {
                         Ok(data) => LlmOutput {
-                            text: data.choices.first().and_then(|c| c.message.content.clone()).unwrap_or_default(),
+                            text: data
+                                .choices
+                                .first()
+                                .and_then(|c| c.message.content.clone())
+                                .unwrap_or_default(),
                             tokens_used: data.usage.total_tokens,
                             model: data.model,
                             finish_reason: data
@@ -209,7 +216,10 @@ pub async fn llm_complete(config: LlmConfig, input: LlmInput) -> LlmOutput {
                                 .join("\n");
                             LlmOutput {
                                 text,
-                                tokens_used: data.usage.input_tokens.saturating_add(data.usage.output_tokens),
+                                tokens_used: data
+                                    .usage
+                                    .input_tokens
+                                    .saturating_add(data.usage.output_tokens),
                                 model: data.model,
                                 finish_reason: data.stop_reason.unwrap_or_default(),
                                 error: String::new(),

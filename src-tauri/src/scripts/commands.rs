@@ -68,7 +68,8 @@ pub fn list_scripts(app: AppHandle) -> Result<Vec<ScriptInfo>, String> {
                 if path.extension().and_then(|s| s.to_str()) == Some("rn") {
                     if let Some(id) = path.file_stem().and_then(|s| s.to_str()) {
                         let source = fs::read_to_string(&path).unwrap_or_default();
-                        let description = source.lines()
+                        let description = source
+                            .lines()
                             .next()
                             .map(|l| l.trim_start_matches("//").trim().to_string())
                             .unwrap_or_default();
@@ -93,7 +94,8 @@ pub fn list_scripts(app: AppHandle) -> Result<Vec<ScriptInfo>, String> {
                 if path.extension().and_then(|s| s.to_str()) == Some("rn") {
                     if let Some(id) = path.file_stem().and_then(|s| s.to_str()) {
                         let source = fs::read_to_string(&path).unwrap_or_default();
-                        let description = source.lines()
+                        let description = source
+                            .lines()
                             .next()
                             .map(|l| l.trim_start_matches("//").trim().to_string())
                             .unwrap_or_default();
@@ -116,7 +118,10 @@ pub fn list_scripts(app: AppHandle) -> Result<Vec<ScriptInfo>, String> {
 #[tauri::command]
 pub fn read_script(app: AppHandle, id: String) -> Result<ScriptContent, String> {
     // Validate ID: alphanumeric ASCII only
-    if !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
         return Err("invalid script ID: must be alphanumeric".into());
     }
 
@@ -141,7 +146,10 @@ pub fn read_script(app: AppHandle, id: String) -> Result<ScriptContent, String> 
 #[tauri::command]
 pub fn save_script(app: AppHandle, id: String, content: String) -> Result<(), String> {
     // Validate ID
-    if !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
         return Err("invalid script ID: must be alphanumeric".into());
     }
 
@@ -176,16 +184,17 @@ pub async fn run_script(
     .map_err(|e| e.to_string())?;
 
     // Get RUNE_ENGINE
-    let engine = RUNE_ENGINE.get().ok_or_else(|| String::from("Rune engine not initialized"))?;
+    let engine = RUNE_ENGINE
+        .get()
+        .ok_or_else(|| String::from("Rune engine not initialized"))?;
 
     // Run synchronously in a blocking task to avoid blocking the async runtime
     let input_clone = input.clone();
-    let lines: Vec<ConsoleLine> = tokio::task::spawn_blocking(move || {
-        engine.run(&source, input_clone)
-    })
-    .await
-    .map_err(|e| format!("task join error: {}", e))?
-    .map_err(|e: PluginError| e.to_string())?;
+    let lines: Vec<ConsoleLine> =
+        tokio::task::spawn_blocking(move || engine.run(&source, input_clone))
+            .await
+            .map_err(|e| format!("task join error: {}", e))?
+            .map_err(|e: PluginError| e.to_string())?;
 
     // Emit each line as a Tauri event for real-time streaming
     // Use window.emit() instead of app.emit() for window-scoped events

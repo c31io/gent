@@ -1,5 +1,5 @@
+use crate::components::canvas::state::{BundledGroup, SavedSelection};
 use leptos::prelude::*;
-use crate::components::canvas::state::{SavedSelection, BundledGroup};
 
 /// Bundled templates - these would be loaded from static data
 pub static BUNDLED_GROUPS: &[BundledGroup] = &[
