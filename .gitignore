@@ -1,5 +1,8 @@
 /dist/
 /target/
 /Cargo.lock
-/.worktrees/
+
 /src/gent-plugin/target/
+
+/.claude/
+/docs/superpowers/
