@@ -99,12 +99,20 @@ fn TabBar(
                                     let mut new_tabs = tabs.get();
                                     if idx < new_tabs.len() {
                                         new_tabs.remove(idx);
+                                        let active_idx = active_tab.get();
                                         let new_active = if new_tabs.is_empty() {
                                             None
                                         } else if is_active {
                                             Some(idx.saturating_sub(1))
+                                        } else if let Some(current_active) = active_idx {
+                                            // If closed tab was before active tab, decrement active index
+                                            if idx < current_active {
+                                                Some(current_active - 1)
+                                            } else {
+                                                Some(current_active)
+                                            }
                                         } else {
-                                            active_tab.get()
+                                            None
                                         };
                                         set_tabs.run(new_tabs);
                                         set_active_tab.run(new_active);
