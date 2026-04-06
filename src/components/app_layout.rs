@@ -914,23 +914,49 @@ pub fn AppLayout() -> impl IntoView {
                     on:mousedown={handle_left_divider_mouse_down}
                 ></div>
 
-                {/* Canvas */}
-                <Canvas
-                    nodes={nodes.into()}
-                    connections={connections.into()}
-                    selected_node_ids={selected_node_ids.into()}
-                    set_selected_node_ids={set_selected_node_ids}
-                    set_nodes={set_nodes}
-                    set_connections={set_connections}
-                    deleting_node_id={Some(deleting_node_id.into())}
-                    on_node_drop={Some(Callback::from(handle_node_drop))}
-                    left_width={Some(left_width.into())}
-                    right_width={Some(right_width.into())}
-                    on_trigger={Some(Callback::new(handle_trigger))}
-                    on_text_change={Some(Callback::new(move |(node_id, new_text)| handle_text_change(node_id, new_text)))}
-                    on_selection_change={None::<Callback<Option<u32>>>}
-                    on_node_right_click={Some(Callback::new(handle_node_inspect))}
-                />
+                {/* Canvas + Inspector column */}
+                <div class="canvas-column">
+                    <Canvas
+                        nodes={nodes.into()}
+                        connections={connections.into()}
+                        selected_node_ids={selected_node_ids.into()}
+                        set_selected_node_ids={set_selected_node_ids}
+                        set_nodes={set_nodes}
+                        set_connections={set_connections}
+                        deleting_node_id={Some(deleting_node_id.into())}
+                        on_node_drop={Some(Callback::from(handle_node_drop))}
+                        left_width={Some(left_width.into())}
+                        right_width={Some(right_width.into())}
+                        on_trigger={Some(Callback::new(handle_trigger))}
+                        on_text_change={Some(Callback::new(move |(node_id, new_text)| handle_text_change(node_id, new_text)))}
+                        on_node_right_click={Some(Callback::new(handle_node_inspect))}
+                    />
+
+                    {/* Inspector divider (only show if there are tabs) */}
+                    {move || {
+                        if !inspector_tabs.get().is_empty() {
+                            Some(view! {
+                                <div
+                                    class="divider divider-horizontal"
+                                    on:mousedown={handle_inspector_divider_mouse_down}
+                                ></div>
+                            })
+                        } else {
+                            None
+                        }
+                    }}
+
+                    {/* Inspector panel */}
+                    <InspectorPanel
+                        tabs={inspector_tabs.into()}
+                        active_tab={active_inspector_tab.into()}
+                        nodes={nodes.into()}
+                        height={inspector_height.into()}
+                        set_active_tab={Callback::new(move |idx| set_active_inspector_tab.set(idx))}
+                        set_tabs={Callback::new(move |tabs| set_inspector_tabs.set(tabs))}
+                        on_update_node={Callback::new(handle_update_node)}
+                    />
+                </div>
 
                 {/* Right Divider */}
                 <div
