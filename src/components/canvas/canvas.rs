@@ -53,6 +53,10 @@ pub fn Canvas(
     #[prop(default = None)] on_trigger: Option<Callback<u32>>,
     /// Callback when text input changes in a node
     #[prop(default = None)] on_text_change: Option<Callback<(u32, String)>>,
+    /// Callback when a node is right-clicked for inspection
+    /// Args: (node_id, is_double_click)
+    #[prop(default = None)]
+    on_node_right_click: Option<Callback<(u32, bool)>>,
 ) -> impl IntoView {
     // Canvas transform state (local to canvas)
     let (zoom, set_zoom) = signal(1.0f64);
@@ -82,6 +86,7 @@ pub fn Canvas(
     let (is_selecting, set_is_selecting) = signal(false);
     let (selection_box, set_selection_box) = signal(Option::<(f64, f64, f64, f64)>::None); // (start_x, start_y, end_x, end_y)
     let (selection_drag_start, set_selection_drag_start) = signal(Option::<(f64, f64)>::None); // canvas coords of mousedown
+
 
     // Get canvas offset (left panel width + divider width)
     let get_canvas_offset_x = move || -> f64 {
@@ -246,6 +251,12 @@ pub fn Canvas(
         set_dragging_connection.set(None);
         set_rerouting_from.set(None);
     });
+
+    let handle_node_right_click = move |node_id: u32, is_double: bool| {
+        if let Some(callback) = &on_node_right_click {
+            callback.run((node_id, is_double));
+        }
+    };
 
     // Pan handling
     let handle_mouse_down = move |ev: web_sys::MouseEvent| {
@@ -795,6 +806,7 @@ pub fn Canvas(
                                 cancel_connection_drag={Some(cancel_connection_drag)}
                                 on_trigger={on_trigger}
                                 on_text_change={on_text_change}
+                                on_node_right_click={Some(Callback::from(handle_node_right_click))}
                             />
                         }
                     }).collect::<Vec<_>>()
