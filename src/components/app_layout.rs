@@ -12,6 +12,7 @@ use crate::components::execution_engine::ExecutionState;
 use crate::components::left_panel::{LeftPanel, NODE_TYPES};
 use crate::components::graph_section::GraphSection;
 use crate::components::right_panel::RightPanel;
+use crate::components::inspector_panel::{InspectorPanel, InspectorTab};
 use crate::components::save_load::{copy_to_clipboard, paste_from_clipboard, load_selection, save_saved_selections_to_storage, generate_id, export_to_file, import_from_file};
 use crate::components::toast::{ToastContainer, Toast, ToastType};
 
@@ -78,6 +79,12 @@ pub fn AppLayout() -> impl IntoView {
     // Track if dragging divider
     let (dragging_left, set_dragging_left) = signal(false);
     let (dragging_right, set_dragging_right) = signal(false);
+
+    // Inspector panel state
+    let (inspector_tabs, set_inspector_tabs) = signal(Vec::<InspectorTab>::new());
+    let (active_inspector_tab, set_active_inspector_tab) = signal(Option::<usize>::None);
+    let (inspector_height, set_inspector_height) = signal(250i32);
+    let (inspector_dragging, set_inspector_dragging) = signal(false);
 
     // Lifted state from Canvas for NodeInspector
     let (nodes, set_nodes) = signal(vec![
@@ -725,9 +732,85 @@ pub fn AppLayout() -> impl IntoView {
         set_dragging_right.set(true);
     };
 
+    // Handle node inspection from right-click
+    let handle_node_inspect = {
+        let set_inspector_tabs = set_inspector_tabs.clone();
+        let set_active_inspector_tab = set_active_inspector_tab.clone();
+        let inspector_tabs = inspector_tabs.clone();
+        let active_inspector_tab = active_inspector_tab.clone();
+
+        move |(node_id, is_double_click): (u32, bool)| {
+            let tabs = inspector_tabs.get();
+
+            // Handle double-click: pin the pending preview tab
+            if is_double_click {
+                if let Some(idx) = tabs.iter().position(|t| t.node_id == node_id && t.is_preview) {
+                    set_inspector_tabs.update(|tabs| {
+                        if let Some(tab) = tabs.get_mut(idx) {
+                            tab.is_preview = false;
+                        }
+                    });
+                }
+                return;
+            }
+
+            // Check if node already has a tab
+            if let Some(existing_idx) = tabs.iter().position(|t| t.node_id == node_id) {
+                // Switch to existing tab
+                set_active_inspector_tab.set(Some(existing_idx));
+                return;
+            }
+
+            // Check if we should replace the current preview tab
+            let should_replace_preview = active_inspector_tab.get().map_or(false, |idx| {
+                tabs.get(idx).map_or(false, |t| t.is_preview)
+            });
+
+            if should_replace_preview {
+                // Replace current preview tab
+                let active_idx = active_inspector_tab.get().unwrap();
+                set_inspector_tabs.update(|tabs| {
+                    if let Some(tab) = tabs.get_mut(active_idx) {
+                        tab.node_id = node_id;
+                        tab.is_preview = true;
+                    }
+                });
+            } else {
+                // Add new preview tab
+                let new_tab = InspectorTab {
+                    node_id,
+                    is_preview: true,
+                };
+                let new_idx = tabs.len();
+                set_inspector_tabs.update(|tabs| {
+                    tabs.push(new_tab);
+                });
+                set_active_inspector_tab.set(Some(new_idx));
+            }
+        }
+    };
+
+    // Handle node update from inspector
+    let handle_update_node = {
+        let set_nodes = set_nodes.clone();
+        move |(node_id, new_variant): (u32, crate::components::canvas::state::NodeVariant)| {
+            set_nodes.update(|nodes| {
+                if let Some(node) = nodes.iter_mut().find(|n| n.id == node_id) {
+                    node.variant = new_variant;
+                }
+            });
+        }
+    };
+
+    let handle_inspector_divider_mouse_down = move |ev: web_sys::MouseEvent| {
+        ev.prevent_default();
+        set_inspector_dragging.set(true);
+    };
+
     let handle_mouse_up = move |_ev: web_sys::MouseEvent| {
         set_dragging_left.set(false);
         set_dragging_right.set(false);
+        set_inspector_dragging.set(false);
         // Clear drag preview state
         set_dragging_node_type.set(None);
         // Clear window draggedNodeType to prevent stale state on subsequent clicks
@@ -754,6 +837,14 @@ pub fn AppLayout() -> impl IntoView {
             let new_width = inner_width - ev.client_x();
             if new_width >= 180 && new_width <= 500 {
                 set_right_width.set(new_width);
+            }
+        }
+        if inspector_dragging.get() {
+            let window = web_sys::window().unwrap();
+            let inner_height = window.inner_height().unwrap().as_f64().unwrap() as i32;
+            let new_height = inner_height - ev.client_y();
+            if new_height >= 150 && new_height <= 500 {
+                set_inspector_height.set(new_height);
             }
         }
     };
@@ -838,6 +929,7 @@ pub fn AppLayout() -> impl IntoView {
                     on_trigger={Some(Callback::new(handle_trigger))}
                     on_text_change={Some(Callback::new(move |(node_id, new_text)| handle_text_change(node_id, new_text)))}
                     on_selection_change={None::<Callback<Option<u32>>>}
+                    on_node_right_click={Some(Callback::new(handle_node_inspect))}
                 />
 
                 {/* Right Divider */}
