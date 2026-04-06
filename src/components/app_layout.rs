@@ -198,20 +198,20 @@ pub fn AppLayout() -> impl IntoView {
     // Non-passive window keydown listener
     static KEYDOWN_LISTENER_ADDED: std::sync::Once = std::sync::Once::new();
     let keydown_closure = wasm_bindgen::closure::Closure::wrap(Box::new({
-        let mut nodes = nodes.clone();
-        let mut connections = connections.clone();
-        let mut selected_node_ids = selected_node_ids.clone();
-        let mut set_selected_node_ids = set_selected_node_ids.clone();
-        let mut set_nodes = set_nodes.clone();
-        let mut set_connections = set_connections.clone();
-        let mut set_deleting_node_id = set_deleting_node_id.clone();
-        let mut set_next_node_id = set_next_node_id.clone();
-        let mut set_next_connection_id = set_next_connection_id.clone();
-        let mut next_node_id = next_node_id.clone();
-        let mut next_connection_id = next_connection_id.clone();
-        let mut saved_selections = saved_selections.clone();
-        let mut set_saved_selections = set_saved_selections.clone();
-        let mut add_toast = add_toast.clone();
+        let connections = connections.clone();
+        let nodes = nodes.clone();
+        let selected_node_ids = selected_node_ids.clone();
+        let set_selected_node_ids = set_selected_node_ids.clone();
+        let set_nodes = set_nodes.clone();
+        let set_connections = set_connections.clone();
+        let set_deleting_node_id = set_deleting_node_id.clone();
+        let set_next_node_id = set_next_node_id.clone();
+        let set_next_connection_id = set_next_connection_id.clone();
+        let next_node_id = next_node_id.clone();
+        let next_connection_id = next_connection_id.clone();
+        let saved_selections = saved_selections.clone();
+        let set_saved_selections = set_saved_selections.clone();
+        let add_toast = add_toast.clone();
         let on_selection_change = None::<Callback<Option<u32>>>;
 
         move |ev: web_sys::KeyboardEvent| {
@@ -252,10 +252,10 @@ pub fn AppLayout() -> impl IntoView {
                     // Paste from clipboard
                     ev.prevent_default();
                     let add_toast_clone = add_toast.clone();
-                    let mut set_nodes_clone = set_nodes.clone();
-                    let mut set_connections_clone = set_connections.clone();
-                    let mut set_next_node_id_clone = set_next_node_id.clone();
-                    let mut set_next_connection_id_clone = set_next_connection_id.clone();
+                    let set_nodes_clone = set_nodes.clone();
+                    let set_connections_clone = set_connections.clone();
+                    let set_next_node_id_clone = set_next_node_id.clone();
+                    let set_next_connection_id_clone = set_next_connection_id.clone();
                     spawn_local(async move {
                         match paste_from_clipboard().await {
                             Ok(selection) => {
@@ -366,10 +366,10 @@ pub fn AppLayout() -> impl IntoView {
                         set_deleting_node_id.set(Some(first_id));
                     }
                     let to_delete_clone = to_delete.clone();
-                    let mut set_nodes_clone = set_nodes.clone();
-                    let mut set_connections_clone = set_connections.clone();
-                    let mut set_deleting_node_id_clone = set_deleting_node_id.clone();
-                    let mut set_selected_node_ids_clone = set_selected_node_ids.clone();
+                    let set_nodes_clone = set_nodes.clone();
+                    let set_connections_clone = set_connections.clone();
+                    let set_deleting_node_id_clone = set_deleting_node_id.clone();
+                    let set_selected_node_ids_clone = set_selected_node_ids.clone();
                     spawn_local(async move {
                         TimeoutFuture::new(300).await;
                         set_nodes_clone.update(|n| n.retain(|node| !to_delete_clone.contains(&node.id)));
@@ -850,13 +850,13 @@ pub fn AppLayout() -> impl IntoView {
 
     // Callback to load a saved selection into canvas
     let on_load_selection = {
-        let mut set_nodes = set_nodes.clone();
-        let mut set_connections = set_connections.clone();
-        let mut set_next_node_id = set_next_node_id.clone();
-        let mut set_next_connection_id = set_next_connection_id.clone();
-        let mut next_node_id = next_node_id.clone();
-        let mut next_connection_id = next_connection_id.clone();
-        let mut add_toast = add_toast.clone();
+        let set_nodes = set_nodes.clone();
+        let set_connections = set_connections.clone();
+        let set_next_node_id = set_next_node_id.clone();
+        let set_next_connection_id = set_next_connection_id.clone();
+        let next_node_id = next_node_id.clone();
+        let next_connection_id = next_connection_id.clone();
+        let add_toast = add_toast.clone();
         Callback::new(move |selection: SavedSelection| {
             let (new_nodes, new_conns, next_id, next_conn) = crate::components::save_load::load_selection(
                 selection,
