@@ -42,6 +42,7 @@ pub fn InspectorPanel(
                             <TabBar
                                 tabs=tabs
                                 active_tab=active_tab
+                                nodes=nodes
                                 set_active_tab=set_active_tab
                                 set_tabs=set_tabs
                             />
@@ -63,15 +64,27 @@ pub fn InspectorPanel(
 fn TabBar(
     tabs: Signal<Vec<InspectorTab>>,
     active_tab: Signal<Option<usize>>,
+    nodes: Signal<Vec<NodeState>>,
     set_active_tab: Callback<Option<usize>>,
     set_tabs: Callback<Vec<InspectorTab>>,
 ) -> impl IntoView {
     view! {
         <div class="inspector-tab-bar">
             {move || {
-                tabs.get().iter().enumerate().map(|(idx, tab)| {
+                let tabs_list = tabs.get();
+                let nodes_list = nodes.get();
+
+                tabs_list.iter().enumerate().map(|(idx, tab)| {
                     let is_active = active_tab.get() == Some(idx);
                     let node_id = tab.node_id;
+
+                    // Look up node label
+                    let node_label = nodes_list
+                        .iter()
+                        .find(|n| n.id == node_id)
+                        .map(|n| n.label.clone())
+                        .unwrap_or_else(|| format!("Node {}", node_id));
+
                     view! {
                         <div
                             class="inspector-tab"
@@ -79,7 +92,7 @@ fn TabBar(
                             class:preview=tab.is_preview
                             on:click=move |_| set_active_tab.run(Some(idx))
                         >
-                            <span class="tab-label">{format!("Node {}", node_id)}</span>
+                            <span class="tab-label">{node_label}</span>
                             <button
                                 class="tab-close"
                                 on:click=move |ev| {
