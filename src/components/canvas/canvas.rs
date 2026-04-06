@@ -49,10 +49,16 @@ pub fn Canvas(
     #[prop(default = None)] left_width: Option<Signal<i32>>,
     /// Right panel width signal (for canvas redraw on resize)
     #[prop(default = None)] right_width: Option<Signal<i32>>,
+    /// Inspector panel height signal (for canvas redraw on resize)
+    #[prop(default = None)] inspector_height: Option<Signal<i32>>,
     /// Callback when trigger node is clicked
     #[prop(default = None)] on_trigger: Option<Callback<u32>>,
     /// Callback when text input changes in a node
     #[prop(default = None)] on_text_change: Option<Callback<(u32, String)>>,
+    /// Callback when a node is right-clicked for inspection
+    /// Args: (node_id, is_double_click)
+    #[prop(default = None)]
+    on_node_right_click: Option<Callback<(u32, bool)>>,
 ) -> impl IntoView {
     // Canvas transform state (local to canvas)
     let (zoom, set_zoom) = signal(1.0f64);
@@ -82,6 +88,7 @@ pub fn Canvas(
     let (is_selecting, set_is_selecting) = signal(false);
     let (selection_box, set_selection_box) = signal(Option::<(f64, f64, f64, f64)>::None); // (start_x, start_y, end_x, end_y)
     let (selection_drag_start, set_selection_drag_start) = signal(Option::<(f64, f64)>::None); // canvas coords of mousedown
+
 
     // Get canvas offset (left panel width + divider width)
     let get_canvas_offset_x = move || -> f64 {
@@ -246,6 +253,12 @@ pub fn Canvas(
         set_dragging_connection.set(None);
         set_rerouting_from.set(None);
     });
+
+    let handle_node_right_click = move |node_id: u32, is_double: bool| {
+        if let Some(callback) = &on_node_right_click {
+            callback.run((node_id, is_double));
+        }
+    };
 
     // Pan handling
     let handle_mouse_down = move |ev: web_sys::MouseEvent| {
@@ -630,9 +643,10 @@ pub fn Canvas(
         )
     };
 
-    // Track both panel widths for redraw
+    // Track panel widths and inspector height for redraw
     let left_w = left_width;
     let right_w = right_width;
+    let inspector_h = inspector_height;
 
     // Canvas redraw effect - re-runs when panel widths change (via left_w/right_w tracking)
     // Also tracks zoom/pan so moving/zooming triggers redraw
@@ -641,6 +655,8 @@ pub fn Canvas(
         // Track panel widths so Effect re-runs after panel resize
         let _lw = left_w.get();
         let _rw = right_w.get();
+        // Track inspector height so Effect re-runs after inspector resize
+        let _ih = inspector_h.get();
         // Track zoom/pan so moving/zooming triggers redraw
         let _zoom = zoom.get();
         let _pan_x = pan_x.get();
@@ -795,6 +811,7 @@ pub fn Canvas(
                                 cancel_connection_drag={Some(cancel_connection_drag)}
                                 on_trigger={on_trigger}
                                 on_text_change={on_text_change}
+                                on_node_right_click={Some(Callback::from(handle_node_right_click))}
                             />
                         }
                     }).collect::<Vec<_>>()

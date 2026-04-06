@@ -1,4 +1,6 @@
 use leptos::prelude::*;
+use std::cell::RefCell;
+use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use crate::components::canvas::state::{PortWithOffset, PortDirection, PortType, NodeVariant};
 
@@ -210,6 +212,9 @@ pub fn GraphNode(
     on_trigger: Option<Callback<u32>>,
     #[prop(default = None)] _on_variant_change: Option<Callback<NodeVariant>>,
     #[prop(default = None)] on_text_change: Option<Callback<(u32, String)>>,
+    /// Callback when node is right-clicked for inspection
+    /// Args: (node_id, is_double_click)
+    #[prop(default = None)] on_node_right_click: Option<Callback<(u32, bool)>>,
 ) -> impl IntoView {
     let class = if selected { "node selected" } else { "node" };
     let class = if is_deleting {
@@ -217,6 +222,9 @@ pub fn GraphNode(
     } else {
         class.to_string()
     };
+
+    // Right-click double-click detection state (local to this node instance)
+    let last_right_click = Rc::new(RefCell::new(None::<f64>));
 
     // Calculate content offset based on number of ports
     // Ports are at: 50px, 75px, 100px, 125px... (FIRST_PORT_OFFSET + i * PORT_SPACING)
@@ -253,6 +261,19 @@ pub fn GraphNode(
             data-node-id={node_id}
             style:left={format!("{}px", x)}
             style:top={format!("{}px", y)}
+            on:contextmenu={{
+                let last_click = last_right_click.clone();
+                let on_node_right_click = on_node_right_click.clone();
+                move |ev: web_sys::MouseEvent| {
+                    ev.prevent_default();
+                    let now = js_sys::Date::now();
+                    let is_double = last_click.borrow().map_or(false, |t| now - t < 300.0);
+                    *last_click.borrow_mut() = Some(now);
+                    if let Some(cb) = &on_node_right_click {
+                        cb.run((node_id, is_double));
+                    }
+                }
+            }}
         >
             <div class="node-header">
                 <span>{label}</span>

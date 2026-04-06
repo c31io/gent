@@ -12,7 +12,7 @@ use crate::components::execution_engine::ExecutionState;
 use crate::components::left_panel::{LeftPanel, NODE_TYPES};
 use crate::components::graph_section::GraphSection;
 use crate::components::right_panel::RightPanel;
-use crate::components::node_inspector::NodeInspector;
+use crate::components::inspector_panel::{InspectorPanel, InspectorTab};
 use crate::components::save_load::{copy_to_clipboard, paste_from_clipboard, load_selection, save_saved_selections_to_storage, generate_id, export_to_file, import_from_file};
 use crate::components::toast::{ToastContainer, Toast, ToastType};
 
@@ -80,6 +80,12 @@ pub fn AppLayout() -> impl IntoView {
     let (dragging_left, set_dragging_left) = signal(false);
     let (dragging_right, set_dragging_right) = signal(false);
 
+    // Inspector panel state
+    let (inspector_tabs, set_inspector_tabs) = signal(Vec::<InspectorTab>::new());
+    let (active_inspector_tab, set_active_inspector_tab) = signal(Option::<usize>::None);
+    let (inspector_height, set_inspector_height) = signal(250i32);
+    let (inspector_dragging, set_inspector_dragging) = signal(false);
+
     // Lifted state from Canvas for NodeInspector
     let (nodes, set_nodes) = signal(vec![
         NodeState {
@@ -138,9 +144,6 @@ pub fn AppLayout() -> impl IntoView {
     let (selected_node_ids, set_selected_node_ids) = signal(HashSet::<u32>::new());
     let (deleting_node_id, set_deleting_node_id) = signal(Option::<u32>::None);
     let (next_node_id, set_next_node_id) = signal(4u32);
-
-    // Inspector state for selected node
-    let (inspector_node, set_inspector_node) = signal(Option::<NodeState>::None);
 
     // Drag preview state
     let (dragging_node_type, set_dragging_node_type) = signal(Option::<String>::None);
@@ -729,9 +732,85 @@ pub fn AppLayout() -> impl IntoView {
         set_dragging_right.set(true);
     };
 
+    // Handle node inspection from right-click
+    let handle_node_inspect = {
+        let set_inspector_tabs = set_inspector_tabs.clone();
+        let set_active_inspector_tab = set_active_inspector_tab.clone();
+        let inspector_tabs = inspector_tabs.clone();
+        let active_inspector_tab = active_inspector_tab.clone();
+
+        move |(node_id, is_double_click): (u32, bool)| {
+            let tabs = inspector_tabs.get();
+
+            // Handle double-click: pin the pending preview tab
+            if is_double_click {
+                if let Some(idx) = tabs.iter().position(|t| t.node_id == node_id && t.is_preview) {
+                    set_inspector_tabs.update(|tabs| {
+                        if let Some(tab) = tabs.get_mut(idx) {
+                            tab.is_preview = false;
+                        }
+                    });
+                }
+                return;
+            }
+
+            // Check if node already has a tab
+            if let Some(existing_idx) = tabs.iter().position(|t| t.node_id == node_id) {
+                // Switch to existing tab
+                set_active_inspector_tab.set(Some(existing_idx));
+                return;
+            }
+
+            // Check if we should replace the current preview tab
+            let should_replace_preview = active_inspector_tab.get().map_or(false, |idx| {
+                tabs.get(idx).map_or(false, |t| t.is_preview)
+            });
+
+            if should_replace_preview {
+                // Replace current preview tab
+                let active_idx = active_inspector_tab.get().unwrap();
+                set_inspector_tabs.update(|tabs| {
+                    if let Some(tab) = tabs.get_mut(active_idx) {
+                        tab.node_id = node_id;
+                        tab.is_preview = true;
+                    }
+                });
+            } else {
+                // Add new preview tab
+                let new_tab = InspectorTab {
+                    node_id,
+                    is_preview: true,
+                };
+                let new_idx = tabs.len();
+                set_inspector_tabs.update(|tabs| {
+                    tabs.push(new_tab);
+                });
+                set_active_inspector_tab.set(Some(new_idx));
+            }
+        }
+    };
+
+    // Handle node update from inspector
+    let handle_update_node = {
+        let set_nodes = set_nodes.clone();
+        move |(node_id, new_variant): (u32, crate::components::canvas::state::NodeVariant)| {
+            set_nodes.update(|nodes| {
+                if let Some(node) = nodes.iter_mut().find(|n| n.id == node_id) {
+                    node.variant = new_variant;
+                }
+            });
+        }
+    };
+
+    let handle_inspector_divider_mouse_down = move |ev: web_sys::MouseEvent| {
+        ev.prevent_default();
+        set_inspector_dragging.set(true);
+    };
+
     let handle_mouse_up = move |_ev: web_sys::MouseEvent| {
         set_dragging_left.set(false);
         set_dragging_right.set(false);
+        set_inspector_dragging.set(false);
         // Clear drag preview state
         set_dragging_node_type.set(None);
         // Clear window draggedNodeType to prevent stale state on subsequent clicks
@@ -758,6 +837,14 @@ pub fn AppLayout() -> impl IntoView {
             let new_width = inner_width - ev.client_x();
             if new_width >= 180 && new_width <= 500 {
                 set_right_width.set(new_width);
+            }
+        }
+        if inspector_dragging.get() {
+            let window = web_sys::window().unwrap();
+            let inner_height = window.inner_height().unwrap().as_f64().unwrap() as i32;
+            let new_height = inner_height - ev.client_y();
+            if new_height >= 150 && new_height <= 500 {
+                set_inspector_height.set(new_height);
             }
         }
     };
@@ -827,31 +914,50 @@ pub fn AppLayout() -> impl IntoView {
                     on:mousedown={handle_left_divider_mouse_down}
                 ></div>
 
-                {/* Canvas */}
-                <Canvas
-                    nodes={nodes.into()}
-                    connections={connections.into()}
-                    selected_node_ids={selected_node_ids.into()}
-                    set_selected_node_ids={set_selected_node_ids}
-                    set_nodes={set_nodes}
-                    set_connections={set_connections}
-                    deleting_node_id={Some(deleting_node_id.into())}
-                    on_node_drop={Some(Callback::from(handle_node_drop))}
-                    left_width={Some(left_width.into())}
-                    right_width={Some(right_width.into())}
-                    on_trigger={Some(Callback::new(handle_trigger))}
-                    on_text_change={Some(Callback::new(move |(node_id, new_text)| handle_text_change(node_id, new_text)))}
-                    on_selection_change={Some(Callback::new(move |node_id| {
-                        if let Some(id) = node_id {
-                            let nodes_snapshot = nodes.get();
-                            if let Some(node) = nodes_snapshot.iter().find(|n| n.id == id) {
-                                set_inspector_node.set(Some(node.clone()));
-                            }
+                {/* Canvas + Inspector column */}
+                <div class="canvas-column">
+                    <Canvas
+                        nodes={nodes.into()}
+                        connections={connections.into()}
+                        selected_node_ids={selected_node_ids.into()}
+                        set_selected_node_ids={set_selected_node_ids}
+                        set_nodes={set_nodes}
+                        set_connections={set_connections}
+                        deleting_node_id={Some(deleting_node_id.into())}
+                        on_node_drop={Some(Callback::from(handle_node_drop))}
+                        left_width={Some(left_width.into())}
+                        right_width={Some(right_width.into())}
+                        inspector_height={Some(inspector_height.into())}
+                        on_trigger={Some(Callback::new(handle_trigger))}
+                        on_text_change={Some(Callback::new(move |(node_id, new_text)| handle_text_change(node_id, new_text)))}
+                        on_node_right_click={Some(Callback::new(handle_node_inspect))}
+                    />
+
+                    {/* Inspector divider (only show if there are tabs) */}
+                    {move || {
+                        if !inspector_tabs.get().is_empty() {
+                            Some(view! {
+                                <div
+                                    class="divider divider-horizontal"
+                                    on:mousedown={handle_inspector_divider_mouse_down}
+                                ></div>
+                            })
                         } else {
-                            set_inspector_node.set(None);
+                            None
                         }
-                    }))}
-                />
+                    }}
+
+                    {/* Inspector panel */}
+                    <InspectorPanel
+                        tabs={inspector_tabs.into()}
+                        active_tab={active_inspector_tab.into()}
+                        nodes={nodes.into()}
+                        height={inspector_height.into()}
+                        set_active_tab={Callback::new(move |idx| set_active_inspector_tab.set(idx))}
+                        set_tabs={Callback::new(move |tabs| set_inspector_tabs.set(tabs))}
+                        on_update_node={Callback::new(handle_update_node)}
+                    />
+                </div>
 
                 {/* Right Divider */}
                 <div
@@ -867,44 +973,6 @@ pub fn AppLayout() -> impl IntoView {
                     <RightPanel execution={execution_state.into()} />
                 </div>
             </div>
-
-            {/* Node Inspector Drawer */}
-            <NodeInspector
-                selected_node={inspector_node.into()}
-                on_node_delete={Some(Callback::new(move |node_id: u32| {
-                    // Get current selection
-                    let selected = selected_node_ids.get();
-                    let to_delete: HashSet<u32> = if selected.contains(&node_id) {
-                        // If the deleted node is in selection, delete all selected
-                        selected.clone()
-                    } else {
-                        // Otherwise just delete the single node
-                        let mut s = HashSet::new();
-                        s.insert(node_id);
-                        s
-                    };
-
-                    // Set all as deleting
-                    set_deleting_node_id.set(Some(*to_delete.iter().next().unwrap()));
-                    set_selected_node_ids.update(|ids| ids.clear());
-
-                    // After animation, remove nodes and their connections
-                    spawn_local(async move {
-                        let ids_to_delete = to_delete.clone();
-                        set_nodes.update(|nodes| {
-                            nodes.retain(|n| !ids_to_delete.contains(&n.id));
-                        });
-                        set_connections.update(|conns| {
-                            conns.retain(|c| !ids_to_delete.contains(&c.source_node_id) && !ids_to_delete.contains(&c.target_node_id));
-                        });
-                        set_deleting_node_id.set(None);
-                    });
-                    set_inspector_node.set(None);
-                }))}
-                on_close={Some(Callback::new(move |_| {
-                    set_inspector_node.set(None);
-                }))}
-            />
 
             {/* Drag Preview */}
             {move || {
