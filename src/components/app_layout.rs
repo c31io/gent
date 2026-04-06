@@ -927,6 +927,7 @@ pub fn AppLayout() -> impl IntoView {
                         on_node_drop={Some(Callback::from(handle_node_drop))}
                         left_width={Some(left_width.into())}
                         right_width={Some(right_width.into())}
+                        inspector_height={Some(inspector_height.into())}
                         on_trigger={Some(Callback::new(handle_trigger))}
                         on_text_change={Some(Callback::new(move |(node_id, new_text)| handle_text_change(node_id, new_text)))}
                         on_node_right_click={Some(Callback::new(handle_node_inspect))}

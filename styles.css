@@ -436,42 +436,49 @@ html, body, #app {
   color: var(--text-secondary);
 }
 
-/* Scrollbar styling */
-.panel-content::-webkit-scrollbar,
-.canvas-container::-webkit-scrollbar,
-.code-textarea::-webkit-scrollbar,
-.codemirror-container .CodeMirror .CodeMirror-vscrollbar::-webkit-scrollbar,
-.codemirror-container .CodeMirror .CodeMirror-hscrollbar::-webkit-scrollbar {
+/* Scrollbar styling - unified scrollbar system */
+/* All scrollable areas use consistent scrollbar styling via these custom properties:
+ * --scrollbar-size: width/height of scrollbar
+ * --scrollbar-thumb-color: color of the thumb
+ * --scrollbar-thumb-hover: color on hover
+ * --scrollbar-track-color: track background (default: transparent)
+ * --scrollbar-radius: border radius of thumb
+ */
+
+/* Base scrollbar styles - applied to all scrollable containers */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
-.panel-content::-webkit-scrollbar-track,
-.canvas-container::-webkit-scrollbar-track,
-.codemirror-container .CodeMirror .CodeMirror-vscrollbar::-webkit-scrollbar-track,
-.codemirror-container .CodeMirror .CodeMirror-hscrollbar::-webkit-scrollbar-track {
+::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.code-textarea::-webkit-scrollbar-track {
-  background: var(--bg-input, #1a1a1a);
-}
-
-.panel-content::-webkit-scrollbar-thumb,
-.canvas-container::-webkit-scrollbar-thumb,
-.code-textarea::-webkit-scrollbar-thumb,
-.codemirror-container .CodeMirror .CodeMirror-vscrollbar::-webkit-scrollbar-thumb,
-.codemirror-container .CodeMirror .CodeMirror-hscrollbar::-webkit-scrollbar-thumb {
+::-webkit-scrollbar-thumb {
   background: var(--border-color);
   border-radius: 4px;
 }
 
-.panel-content::-webkit-scrollbar-thumb:hover,
-.canvas-container::-webkit-scrollbar-thumb:hover,
-.code-textarea::-webkit-scrollbar-thumb:hover,
-.codemirror-container .CodeMirror .CodeMirror-vscrollbar::-webkit-scrollbar-thumb:hover,
-.codemirror-container .CodeMirror .CodeMirror-hscrollbar::-webkit-scrollbar-thumb:hover {
+::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
+}
+
+/* Compact scrollbar variant (for tab bars, small areas) */
+.scrollbar-compact::-webkit-scrollbar,
+.scrollbar-compact ::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.scrollbar-compact::-webkit-scrollbar-thumb,
+.scrollbar-compact ::-webkit-scrollbar-thumb {
+  border-radius: 2px;
 }
 
 /* Node Inspector Drawer */
@@ -497,7 +504,6 @@ html, body, #app {
   height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 12px;
 }
 
 .inspector-header {
@@ -509,7 +515,6 @@ html, body, #app {
 .inspector-node-info {
   display: flex;
   align-items: center;
-  gap: 12px;
 }
 
 .node-type-badge {
@@ -551,7 +556,6 @@ html, body, #app {
 .inspector-body {
   display: flex;
   flex-direction: column;
-  gap: 6px;
 }
 
 .config-label {
@@ -808,7 +812,6 @@ html, body, #app {
 }
 
 .inspector-content {
-    padding: 16px 20px;
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -824,12 +827,10 @@ html, body, #app {
 .inspector-node-info {
     display: flex;
     align-items: center;
-    gap: 12px;
 }
 
 .inspector-actions {
     display: flex;
-    gap: 8px;
 }
 
 .close-btn {
@@ -1420,6 +1421,8 @@ html, body, #app {
     border-top: 1px solid var(--border-color, #333);
     min-height: 150px;
     max-height: 500px;
+    padding: 0;
+    margin: 0;
 }
 
 .inspector-divider {
@@ -1438,6 +1441,8 @@ html, body, #app {
     flex-direction: column;
     flex: 1;
     overflow: hidden;
+    padding: 0;
+    margin: 0;
 }
 
 .inspector-empty {
@@ -1457,23 +1462,12 @@ html, body, #app {
     overflow-y: hidden;
     background: var(--bg-tertiary, #252525);
     border-bottom: 1px solid var(--border-color, #333);
-    scrollbar-width: thin;
-    scrollbar-color: var(--border-color) transparent;
     height: 32px;
+    padding: 0;
+    margin: 0;
 }
 
-.inspector-tab-bar::-webkit-scrollbar {
-    height: 4px;
-}
-
-.inspector-tab-bar::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.inspector-tab-bar::-webkit-scrollbar-thumb {
-    background: var(--border-color, #333);
-    border-radius: 2px;
-}
+/* Tab bar uses compact scrollbar (4px) via scrollbar-compact class on parent */
 
 .inspector-tab {
     display: flex;
@@ -1489,6 +1483,7 @@ html, body, #app {
     user-select: none;
     transition: background 0.15s;
     flex-shrink: 0;
+    margin: 0;
 }
 
 .inspector-tab:hover {

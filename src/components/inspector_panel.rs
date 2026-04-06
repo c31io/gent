@@ -28,7 +28,6 @@ pub fn InspectorPanel(
 ) -> impl IntoView {
     view! {
         <div class="inspector-panel" style:height=move || format!("{}px", height.get())>
-            <div class="inspector-divider"></div>
             <div class="inspector-content">
                 {move || {
                     if tabs.get().is_empty() {
@@ -69,7 +68,7 @@ fn TabBar(
     set_tabs: Callback<Vec<InspectorTab>>,
 ) -> impl IntoView {
     view! {
-        <div class="inspector-tab-bar">
+        <div class="inspector-tab-bar scrollbar-compact">
             {move || {
                 let tabs_list = tabs.get();
                 let nodes_list = nodes.get();
