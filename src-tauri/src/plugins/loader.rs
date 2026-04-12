@@ -19,11 +19,6 @@ impl PluginLoader {
         Self { loaders }
     }
 
-    /// Check if any loader can handle this plugin source
-    pub fn can_load(&self, extension: &str) -> bool {
-        self.loaders.iter().any(|l| l.can_load(extension))
-    }
-
     /// Load a plugin using the appropriate loader
     pub fn load_plugin(
         &self,

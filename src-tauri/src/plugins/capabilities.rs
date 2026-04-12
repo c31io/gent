@@ -21,14 +21,4 @@ impl Capability {
             _ => None,
         }
     }
-
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Context => "context",
-            Self::Tools => "tools",
-            Self::Memory => "memory",
-            Self::Nodes => "nodes",
-            Self::Execution => "execution",
-        }
-    }
 }

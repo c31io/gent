@@ -12,16 +12,6 @@ use crate::components::canvas::state::{
 use crate::components::canvas::wires::draw_connections;
 use crate::components::nodes::node::GraphNode;
 
-/// Check if shift key is currently pressed
-fn is_shift_down() -> bool {
-    if let Some(window) = web_sys::window() {
-        if let Ok(val) = js_sys::Reflect::get(&window, &"Shift".into()) {
-            return val.as_bool().unwrap_or(false);
-        }
-    }
-    false
-}
-
 /// Check if two ports are compatible for connection
 fn ports_compatible(source: &Port, target: &Port) -> bool {
     // Trigger ports only connect to other trigger ports

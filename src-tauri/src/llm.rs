@@ -67,7 +67,6 @@ struct AnthropicContentBlock {
     #[serde(rename = "type")]
     block_type: String, // "text" or "thinking"
     text: Option<String>,
-    thinking: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -160,7 +159,7 @@ pub async fn llm_complete(config: LlmConfig, input: LlmInput) -> LlmOutput {
                             tokens_used: 0,
                             model: model.to_string(),
                             finish_reason: String::new(),
-                            error: "failed to parse response".to_string(),
+                            error: format!("failed to parse response: {}", e),
                         },
                     }
                 }
@@ -230,7 +229,7 @@ pub async fn llm_complete(config: LlmConfig, input: LlmInput) -> LlmOutput {
                             tokens_used: 0,
                             model: model.to_string(),
                             finish_reason: String::new(),
-                            error: "failed to parse response".to_string(),
+                            error: format!("failed to parse response: {}", e),
                         },
                     }
                 }

@@ -35,28 +35,8 @@ pub trait Plugin: Send + Sync {
     /// Process an input and return output
     fn process(&self, input: Input) -> Result<Output, PluginError>;
 
-    /// Optional initialization with context
-    fn init(&mut self, _context: Context) -> Result<(), PluginError> {
-        Ok(())
-    }
-
     /// Returns the plugin ID
     fn id(&self) -> &str;
 }
 
-/// Capability-gated context passed to plugins during init
-#[derive(Debug, Clone)]
-pub struct Context {
-    capabilities: Vec<Capability>,
-    // Future: host handle for calling back into Gent
-}
-
-impl Context {
-    pub fn new(capabilities: Vec<Capability>) -> Self {
-        Self { capabilities }
-    }
-
-    pub fn has_capability(&self, cap: Capability) -> bool {
-        self.capabilities.contains(&cap)
-    }
-}
+// Capability-gated context reserved for future plugin initialization API

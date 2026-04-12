@@ -227,7 +227,12 @@ pub fn ScriptEditor() -> impl IntoView {
                     }
                     match run_script(script.id.clone()).await {
                         Ok(result) => {
-                            set_console_lines.set(result.console_lines);
+                            let mut lines = vec![ConsoleLine {
+                                level: ConsoleLevel::Info,
+                                message: format!("Run ID: {}", result.run_id),
+                            }];
+                            lines.extend(result.console_lines);
+                            set_console_lines.set(lines);
                             set_running.set(false);
                         }
                         Err(e) => {

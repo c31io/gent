@@ -11,7 +11,9 @@ use crate::components::canvas::state::{
     NodeStatus, SavedSelection,
 };
 use crate::components::canvas::Canvas;
-use crate::components::execution_engine::ExecutionState;
+use crate::components::execution_engine::{
+    execute_downstream_order, execute_node_sync, ExecutionState,
+};
 use crate::components::inspector_panel::{InspectorPanel, InspectorTab};
 use crate::components::left_panel::{LeftPanel, NODE_TYPES};
 use crate::components::right_panel::RightPanel;
@@ -512,54 +514,12 @@ pub fn AppLayout() -> impl IntoView {
     });
     keydown_closure.forget();
 
-    /// Execute nodes in topological order (BFS from trigger), collecting upstream results
-    fn execute_downstream_order(
-        nodes: &[NodeState],
-        connections: &[ConnectionState],
-        trigger_id: u32,
-    ) -> Vec<(u32, HashMap<u32, String>)> {
-        use std::collections::{HashMap, VecDeque};
-
-        let mut in_degree: HashMap<u32, usize> = HashMap::new();
-        let mut adj: HashMap<u32, Vec<u32>> = HashMap::new();
-
-        for node in nodes {
-            in_degree.insert(node.id, 0);
-            adj.insert(node.id, vec![]);
-        }
-
-        for conn in connections {
-            if let Some(list) = adj.get_mut(&conn.source_node_id) {
-                list.push(conn.target_node_id);
-            }
-            *in_degree.entry(conn.target_node_id).or_insert(0) += 1;
-        }
-
-        // BFS from trigger
-        let mut queue: VecDeque<u32> = VecDeque::new();
-        queue.push_back(trigger_id);
-
-        let mut execution_order: Vec<(u32, HashMap<u32, String>)> = vec![];
-        let upstream_results: HashMap<u32, String> = HashMap::new();
-
-        while let Some(node_id) = queue.pop_front() {
-            execution_order.push((node_id, upstream_results.clone()));
-
-            if let Some(downstream_ids) = adj.get(&node_id) {
-                for &downstream_id in downstream_ids {
-                    *in_degree.entry(downstream_id).or_insert(0) -= 1;
-                    if in_degree[&downstream_id] == 0 {
-                        queue.push_back(downstream_id);
-                    }
-                }
-            }
-        }
-
-        execution_order
-    }
-
     // Handle trigger node execution
     let handle_trigger = move |node_id: u32| {
+        use crate::components::execution_engine::{
+            get_upstream_nodes, Task, TaskStatus, Timestamp, TraceLevel,
+        };
+
         let nodes_snapshot = nodes.get();
         let connections_snapshot = connections.get();
 
@@ -571,8 +531,7 @@ pub fn AppLayout() -> impl IntoView {
             return;
         }
 
-        // Get execution order with upstream results
-        let execution_plan =
+        let exec_order_ids =
             execute_downstream_order(&nodes_snapshot, &connections_snapshot, node_id);
 
         let mut exec = ExecutionState::new();
@@ -580,84 +539,139 @@ pub fn AppLayout() -> impl IntoView {
 
         let mut node_results: HashMap<u32, String> = HashMap::new();
 
-        // Extract just the node IDs in order for upstream computation
-        let exec_order_ids: Vec<u32> = execution_plan.iter().map(|(id, _)| *id).collect();
-
-        for (exec_idx, (exec_node_id, _upstream)) in execution_plan.into_iter().enumerate() {
-            // Compute actual upstream results from previously executed nodes
-            let mut upstream: HashMap<u32, String> = HashMap::new();
-            for prev_exec_node_id in exec_order_ids.iter().take(exec_idx) {
-                if let Some(result) = node_results.get(prev_exec_node_id) {
-                    upstream.insert(*prev_exec_node_id, result.clone());
-                }
-            }
+        for exec_node_id in exec_order_ids.iter().copied() {
+            let upstream_ids = get_upstream_nodes(&connections_snapshot, exec_node_id);
+            let upstream: HashMap<u32, String> = upstream_ids
+                .into_iter()
+                .filter_map(|id| node_results.get(&id).map(|r| (id, r.clone())))
+                .collect();
 
             if exec_node_id == node_id {
-                // Trigger node itself
-                let mut task =
-                    crate::components::execution_engine::Task::new(exec_node_id, "trigger", None);
-                task.status = crate::components::execution_engine::TaskStatus::Running;
-                task.started_at = Some(crate::components::execution_engine::Timestamp::now());
+                let mut task = Task::new(exec_node_id, "trigger", None);
+                task.status = TaskStatus::Running;
+                task.started_at = Some(Timestamp::now());
                 task.add_message(
                     &format!("Trigger fired [task_id={}]", task.id),
-                    crate::components::execution_engine::TraceLevel::Info,
+                    TraceLevel::Info,
                 );
-                task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
-                task.status = crate::components::execution_engine::TaskStatus::Complete;
+                task.finished_at = Some(Timestamp::now());
+                task.status = TaskStatus::Complete;
                 exec.tasks.push(task);
-            } else {
-                // Find the node state
-                if let Some(node) = nodes_snapshot.iter().find(|n| n.id == exec_node_id) {
-                    // Determine parent_id from the previous task in execution order
-                    let parent_id = exec.tasks.last().map(|t| t.id.clone());
-                    // Set waiting_on if we have upstream dependencies
-                    let waiting_on = upstream.keys().next().copied();
+            } else if let Some(node) = nodes_snapshot.iter().find(|n| n.id == exec_node_id) {
+                let parent_id = exec.tasks.last().map(|t| t.id.clone());
 
-                    let mut task = crate::components::execution_engine::Task::new(
-                        exec_node_id,
-                        &node.node_type,
-                        parent_id.clone(),
-                    );
-                    task.waiting_on = waiting_on;
-                    task.status = crate::components::execution_engine::TaskStatus::Running;
-                    task.started_at = Some(crate::components::execution_engine::Timestamp::now());
-                    task.add_message(
+                if node.node_type == "model" {
+                    let config_json = upstream
+                        .values()
+                        .next()
+                        .cloned()
+                        .unwrap_or_else(|| {
+                            r#"{"format":"openai","model_name":"","api_key":"","custom_url":""}"#.to_string()
+                        });
+
+                    fn get_json_str(json: &str, key: &str) -> String {
+                        let pattern = format!(r#""{}":"#, key);
+                        json.find(&pattern)
+                            .map(|start| {
+                                let value_start = start + pattern.len();
+                                let rest = &json[value_start..];
+                                if rest.starts_with('"') {
+                                    let end = rest[1..]
+                                        .find('"')
+                                        .map(|i| i + 1)
+                                        .unwrap_or(rest.len());
+                                    rest[1..end].to_string()
+                                } else {
+                                    rest.split(',')
+                                        .next()
+                                        .unwrap_or("")
+                                        .split('}')
+                                        .next()
+                                        .unwrap_or("")
+                                        .to_string()
+                                }
+                            })
+                            .unwrap_or_default()
+                    }
+
+                    let config = crate::components::canvas::state::ModelConfig {
+                        format: get_json_str(&config_json, "format"),
+                        model_name: get_json_str(&config_json, "model_name"),
+                        api_key: get_json_str(&config_json, "api_key"),
+                        custom_url: get_json_str(&config_json, "custom_url"),
+                    };
+
+                    let prompt_text = upstream.values().next().cloned().unwrap_or_default();
+                    let temperature = 1.0;
+
+                    let mut model_task = Task::new(exec_node_id, "model", parent_id.clone());
+                    model_task.status = TaskStatus::Waiting;
+                    model_task.waiting_on = Some(exec_node_id);
+                    model_task.add_message(
                         &format!(
+                            "Model call: {} / {} / prompt_len={}",
+                            config.format, config.model_name, prompt_text.len()
+                        ),
+                        TraceLevel::Info,
+                    );
+                    exec.tasks.push(model_task);
+
+                    let exec_state_setter = set_execution_state;
+                    spawn_local(async move {
+                        let result = call_llm_complete(
+                            config.format.clone(),
+                            config.model_name.clone(),
+                            config.api_key.clone(),
+                            config.custom_url.clone(),
+                            prompt_text.clone(),
+                            temperature,
+                        )
+                        .await;
+                        exec_state_setter.update(|exec| {
+                            if let Some(task) = exec.tasks.iter_mut().find(|t| t.node_id == exec_node_id) {
+                                match result {
+                                    Ok(output) => {
+                                        let status = if output.error.is_empty() {
+                                            TaskStatus::Complete
+                                        } else {
+                                            TaskStatus::Error
+                                        };
+                                        let trace_msg = if output.error.is_empty() {
+                                            format!(
+                                                "LLM result: {} (model={} finish_reason={} tokens={})",
+                                                output.text, output.model, output.finish_reason, output.tokens_used
+                                            )
+                                        } else {
+                                            format!("LLM error: {}", output.error)
+                                        };
+                                        task.status = status;
+                                        task.finished_at = Some(Timestamp::now());
+                                        task.result = Some(output.text.clone());
+                                        task.add_message(&trace_msg, TraceLevel::Info);
+                                    }
+                                    Err(e) => {
+                                        task.status = TaskStatus::Error;
+                                        task.finished_at = Some(Timestamp::now());
+                                        task.add_message(
+                                            &format!("Model call failed: {}", e),
+                                            TraceLevel::Error,
+                                        );
+                                    }
+                                }
+                            }
+                        });
+                    });
+                } else {
+                    let (mut task, result) = execute_node_sync(node, &upstream, parent_id);
+                    if task.messages.len() == 1 {
+                        task.messages[0].message = format!(
                             "{} [node_id={}, parent_id={:?}]",
                             node.label, task.node_id, task.parent_id
-                        ),
-                        crate::components::execution_engine::TraceLevel::Info,
-                    );
+                        );
+                    }
 
-                    // Execute node with upstream results
-                    let mut skip_post_push = false;
-                    let result = match node.node_type.as_str() {
-                        "user_input" => {
-                            if let crate::components::canvas::state::NodeVariant::UserInput {
-                                text,
-                            } = &node.variant
-                            {
-                                task.add_message(
-                                    &format!("Text Input: {}", text),
-                                    crate::components::execution_engine::TraceLevel::Info,
-                                );
-                                text.clone()
-                            } else {
-                                task.add_message(
-                                    "Text Input (no text)",
-                                    crate::components::execution_engine::TraceLevel::Warn,
-                                );
-                                String::new()
-                            }
-                        }
-                        "chat_output" => {
-                            // Get input from upstream (user_input node)
-                            let input = upstream.values().next().cloned().unwrap_or_default();
-                            task.add_message(
-                                &format!("Text Output received: {}", input),
-                                crate::components::execution_engine::TraceLevel::Info,
-                            );
-                            // Update the chat_output node's variant response
+                    if node.node_type == "chat_output" {
+                        if let Some(ref input) = result {
                             set_nodes.update(|nodes: &mut Vec<NodeState>| {
                                 if let Some(n) = nodes.iter_mut().find(|n| n.id == exec_node_id) {
                                     if let crate::components::canvas::state::NodeVariant::ChatOutput { response } = &mut n.variant {
@@ -665,215 +679,13 @@ pub fn AppLayout() -> impl IntoView {
                                     }
                                 }
                             });
-                            input
                         }
-                        "web_search" => {
-                            task.add_message(
-                                "Web Search → { mock results }",
-                                crate::components::execution_engine::TraceLevel::Info,
-                            );
-                            r#"{"query":"mock","results":[]}"#.to_string()
-                        }
-                        "code_execute" => {
-                            task.add_message(
-                                "Code Execute → (TBD)",
-                                crate::components::execution_engine::TraceLevel::Info,
-                            );
-                            "code executed".to_string()
-                        }
-                        "image_input" => {
-                            if let crate::components::canvas::state::NodeVariant::FileInput {
-                                path,
-                            } = &node.variant
-                            {
-                                task.add_message(
-                                    &format!("Image: {}", path),
-                                    crate::components::execution_engine::TraceLevel::Info,
-                                );
-                                path.clone()
-                            } else {
-                                task.add_message(
-                                    "Image Input (no path)",
-                                    crate::components::execution_engine::TraceLevel::Warn,
-                                );
-                                String::new()
-                            }
-                        }
-                        "audio_input" => {
-                            if let crate::components::canvas::state::NodeVariant::FileInput {
-                                path,
-                            } = &node.variant
-                            {
-                                task.add_message(
-                                    &format!("Audio: {}", path),
-                                    crate::components::execution_engine::TraceLevel::Info,
-                                );
-                                path.clone()
-                            } else {
-                                task.add_message(
-                                    "Audio Input (no path)",
-                                    crate::components::execution_engine::TraceLevel::Warn,
-                                );
-                                String::new()
-                            }
-                        }
-                        "model" => {
-                            // Extract config from the upstream "config" port connection
-                            let config_json = upstream
-                                .values()
-                                .next()
-                                .cloned()
-                                .unwrap_or_else(|| {
-                                    r#"{"format":"openai","model_name":"","api_key":"","custom_url":""}"#.to_string()
-                                });
-
-                            // Simple JSON parsing since serde_json is not available in wasm
-                            fn get_json_str(json: &str, key: &str) -> String {
-                                let pattern = format!(r#""{}":"#, key);
-                                json.find(&pattern)
-                                    .map(|start| {
-                                        let value_start = start + pattern.len();
-                                        let rest = &json[value_start..];
-                                        if rest.starts_with('"') {
-                                            // Quoted string value
-                                            let end = rest[1..]
-                                                .find('"')
-                                                .map(|i| i + 1)
-                                                .unwrap_or(rest.len());
-                                            rest[1..end].to_string()
-                                        } else {
-                                            // Fallback for other values
-                                            rest.split(',')
-                                                .next()
-                                                .unwrap_or("")
-                                                .split('}')
-                                                .next()
-                                                .unwrap_or("")
-                                                .to_string()
-                                        }
-                                    })
-                                    .unwrap_or_default()
-                            }
-
-                            let config = crate::components::canvas::state::ModelConfig {
-                                format: get_json_str(&config_json, "format"),
-                                model_name: get_json_str(&config_json, "model_name"),
-                                api_key: get_json_str(&config_json, "api_key"),
-                                custom_url: get_json_str(&config_json, "custom_url"),
-                            };
-
-                            // prompt from upstream
-                            let prompt_text = upstream.values().next().cloned().unwrap_or_default();
-                            let temperature = 1.0;
-
-                            // Push a "waiting" task
-                            let mut model_task = crate::components::execution_engine::Task::new(
-                                exec_node_id,
-                                "model",
-                                parent_id.clone(),
-                            );
-                            model_task.status =
-                                crate::components::execution_engine::TaskStatus::Waiting;
-                            model_task.waiting_on = Some(exec_node_id);
-                            model_task.add_message(
-                                &format!(
-                                    "Model call: {} / {} / prompt_len={}",
-                                    config.format,
-                                    config.model_name,
-                                    prompt_text.len()
-                                ),
-                                crate::components::execution_engine::TraceLevel::Info,
-                            );
-                            exec.tasks.push(model_task);
-
-                            // Spawn async call
-                            let exec_state_setter = set_execution_state;
-                            spawn_local(async move {
-                                let result = call_llm_complete(
-                                    config.format.clone(),
-                                    config.model_name.clone(),
-                                    config.api_key.clone(),
-                                    config.custom_url.clone(),
-                                    prompt_text.clone(),
-                                    temperature,
-                                )
-                                .await;
-                                match result {
-                                    Ok(output) => {
-                                        let status = if output.error.is_empty() {
-                                            crate::components::execution_engine::TaskStatus::Complete
-                                        } else {
-                                            crate::components::execution_engine::TaskStatus::Error
-                                        };
-                                        let trace_msg = if output.error.is_empty() {
-                                            format!(
-                                                "LLM result: {} ({} tokens)",
-                                                output.text, output.tokens_used
-                                            )
-                                        } else {
-                                            format!("LLM error: {}", output.error)
-                                        };
-                                        exec_state_setter.update(|exec| {
-                                            if let Some(task) = exec.tasks.iter_mut().find(|t| t.node_id == exec_node_id) {
-                                                task.status = status;
-                                                task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
-                                                task.result = Some(output.text.clone());
-                                                task.add_message(
-                                                    &trace_msg,
-                                                    crate::components::execution_engine::TraceLevel::Info,
-                                                );
-                                            }
-                                        });
-                                    }
-                                    Err(e) => {
-                                        exec_state_setter.update(|exec| {
-                                            if let Some(task) = exec.tasks.iter_mut().find(|t| t.node_id == exec_node_id) {
-                                                task.status = crate::components::execution_engine::TaskStatus::Error;
-                                                task.finished_at = Some(crate::components::execution_engine::Timestamp::now());
-                                                task.add_message(
-                                                    &format!("Model call failed: {}", e),
-                                                    crate::components::execution_engine::TraceLevel::Error,
-                                                );
-                                            }
-                                        });
-                                    }
-                                }
-                            });
-
-                            skip_post_push = true;
-                            String::new()
-                        }
-                        "model_config" => {
-                            let config_json = if let crate::components::canvas::state::NodeVariant::ModelConfig { format, model_name, api_key, custom_url } = &node.variant {
-                                format!(r#"{{"format":"{}","model_name":"{}","api_key":"{}","custom_url":"{}"}}"#, format, model_name, api_key, custom_url)
-                            } else {
-                                r#"{"format":"openai","model_name":"","api_key":"","custom_url":""}"#.to_string()
-                            };
-                            task.status = crate::components::execution_engine::TaskStatus::Complete;
-                            task.add_message(
-                                "Model Config node",
-                                crate::components::execution_engine::TraceLevel::Info,
-                            );
-                            config_json
-                        }
-                        _ => {
-                            task.add_message(
-                                &format!("{} executed", node.label),
-                                crate::components::execution_engine::TraceLevel::Info,
-                            );
-                            upstream.values().next().cloned().unwrap_or_default()
-                        }
-                    };
-
-                    if !skip_post_push {
-                        task.result = Some(result.clone());
-                        node_results.insert(exec_node_id, result.clone());
-
-                        task.finished_at =
-                            Some(crate::components::execution_engine::Timestamp::now());
-                        task.status = crate::components::execution_engine::TaskStatus::Complete;
-                        exec.tasks.push(task);
                     }
+
+                    if let Some(ref r) = result {
+                        node_results.insert(exec_node_id, r.clone());
+                    }
+                    exec.tasks.push(task);
                 }
             }
         }
@@ -883,6 +695,7 @@ pub fn AppLayout() -> impl IntoView {
     };
 
     // Callback to start palette drag
+
     let on_palette_drag_start: Callback<String> = Callback::new(move |node_type: String| {
         set_dragging_node_type.set(Some(node_type));
     });

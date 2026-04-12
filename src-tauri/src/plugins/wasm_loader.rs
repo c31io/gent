@@ -40,15 +40,6 @@ impl WasmPluginLoader {
         let engine = Engine::default();
         Ok(Self { engine })
     }
-
-    /// Check if bytes appear to be a valid WASM module
-    fn is_wasm(wasm: &[u8]) -> bool {
-        // Check for WASM magic number
-        if wasm.len() < 4 {
-            return false;
-        }
-        wasm[0..4] == [0x00, 0x61, 0x73, 0x6d] // \0asm
-    }
 }
 
 fn build_wasi_ctx(plugin_id: &str, input_json: &str, captured: &CapturedOutput) -> WasiP1Ctx {
@@ -83,7 +74,7 @@ impl super::PluginSource for WasmPluginLoader {
     fn load(
         &self,
         wasm: &[u8],
-        capabilities: &[Capability],
+        _capabilities: &[Capability],
     ) -> Result<Box<dyn Plugin>, PluginError> {
         let module = Module::from_binary(&self.engine, wasm)
             .map_err(|e| PluginError::Loader(e.to_string()))?;
@@ -93,7 +84,6 @@ impl super::PluginSource for WasmPluginLoader {
             engine: self.engine.clone(),
             module,
             manifest: Manifest::default(),
-            capabilities: capabilities.to_vec(),
             console_lines: Arc::new(Mutex::new(Vec::new())),
         };
 
@@ -106,7 +96,6 @@ struct WasmPluginInstance {
     engine: Engine,
     module: Module,
     manifest: Manifest,
-    capabilities: Vec<Capability>,
     console_lines: Arc<Mutex<Vec<ConsoleLine>>>,
 }
 

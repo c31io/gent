@@ -5,7 +5,6 @@ pub mod execution_trace;
 pub mod graph_section;
 pub mod inspector_panel;
 pub mod left_panel;
-pub mod modal;
 pub mod nodes;
 pub mod plugin_manager;
 pub mod right_panel;

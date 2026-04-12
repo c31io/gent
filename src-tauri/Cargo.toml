@@ -28,8 +28,8 @@ wasmtime = "22"
 wasmtime-wasi = "22"
 
 # Rune scripting
-rune = "0.13"
-rune-modules = "0.13"
+rune = "0.14"
+rune-modules = "0.14"
 
 # Utilities
 tracing = "0.1"
