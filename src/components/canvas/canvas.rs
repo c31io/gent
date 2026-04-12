@@ -59,6 +59,10 @@ pub fn Canvas(
     /// Callback when a saved selection is dropped on the canvas (receives selection_id, canvas x, y)
     #[prop(default = None)]
     on_selection_drop: Option<Callback<(String, f64, f64)>>,
+    /// Current zoom level
+    zoom: Signal<f64>,
+    /// Zoom setter
+    set_zoom: WriteSignal<f64>,
     /// Left panel width signal (for calculating canvas offset)
     #[prop(default = None)]
     left_width: Option<Signal<i32>>,
@@ -80,7 +84,6 @@ pub fn Canvas(
     on_node_right_click: Option<Callback<(u32, bool)>>,
 ) -> impl IntoView {
     // Canvas transform state (local to canvas)
-    let (zoom, set_zoom) = signal(1.0f64);
     let (pan_x, set_pan_x) = signal(0.0f64);
     let (pan_y, set_pan_y) = signal(0.0f64);
 

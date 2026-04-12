@@ -187,6 +187,10 @@ pub fn LeftPanel(
     on_delete_selection: Callback<String>,
     /// Callback when a bundled group is loaded
     on_load_bundle: Callback<BundledGroup>,
+    #[prop(default = None)]
+    on_bundle_drag_start: Option<Callback<String>>,
+    #[prop(default = None)]
+    on_selection_drag_start: Option<Callback<String>>,
 ) -> impl IntoView {
     let (active_tab, set_active_tab) = signal(Tab::default());
 
@@ -205,6 +209,8 @@ pub fn LeftPanel(
                             on_load_selection={on_load_selection}
                             on_delete_selection={on_delete_selection}
                             on_load_bundle={on_load_bundle}
+                            on_bundle_drag_start={on_bundle_drag_start}
+                            on_selection_drag_start={on_selection_drag_start}
                         />
                     </div>
                 }.into_any(),

@@ -252,6 +252,11 @@ html, body, #app {
   color: var(--text-primary);
   transform: translate(-50%, -50%);
   white-space: nowrap;
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Node (DOM-based) */
@@ -1357,6 +1362,8 @@ html, body, #app {
     cursor: pointer;
     font-size: 13px;
     transition: all 0.15s;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .bundle-item:hover,

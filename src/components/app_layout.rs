@@ -90,9 +90,24 @@ fn shift_nodes(nodes: &mut [NodeState], dx: f64, dy: f64) {
     }
 }
 
+fn graph_bounds(nodes: &[NodeState]) -> (f64, f64) {
+    if nodes.is_empty() {
+        return (160.0, 100.0);
+    }
+    let min_x = nodes.iter().map(|n| n.x).fold(f64::INFINITY, f64::min);
+    let min_y = nodes.iter().map(|n| n.y).fold(f64::INFINITY, f64::min);
+    let max_x = nodes.iter().map(|n| n.x).fold(f64::NEG_INFINITY, f64::max);
+    let max_y = nodes.iter().map(|n| n.y).fold(f64::NEG_INFINITY, f64::max);
+    let width = (max_x + 160.0) - min_x;
+    let height = (max_y + 100.0) - min_y;
+    (width.max(0.0), height.max(0.0))
+}
+
 fn center_nodes_at(nodes: &mut [NodeState], x: f64, y: f64) {
-    let (min_x, min_y) = nodes.iter().fold((f64::MAX, f64::MAX), |(mx, my), n| (mx.min(n.x), my.min(n.y)));
-    shift_nodes(nodes, x - min_x, y - min_y);
+    let (width, height) = graph_bounds(nodes);
+    let min_x = nodes.iter().map(|n| n.x).fold(f64::INFINITY, f64::min);
+    let min_y = nodes.iter().map(|n| n.y).fold(f64::INFINITY, f64::min);
+    shift_nodes(nodes, x - min_x - width / 2.0, y - min_y - height / 2.0);
 }
 
 fn bundle_to_selection(bundle: BundledGroup) -> SavedSelection {
@@ -182,8 +197,12 @@ pub fn AppLayout() -> impl IntoView {
 
     // Drag preview state
     let (dragging_node_type, set_dragging_node_type) = signal(Option::<String>::None);
+    let (dragging_graph_label, set_dragging_graph_label) = signal(Option::<String>::None);
     let (drag_x, set_drag_x) = signal(0.0);
     let (drag_y, set_drag_y) = signal(0.0);
+    let (drag_preview_w, set_drag_preview_w) = signal(0.0);
+    let (drag_preview_h, set_drag_preview_h) = signal(0.0);
+    let (zoom, set_zoom) = signal(1.0f64);
 
     // Execution state for the execution engine
     let (execution_state, set_execution_state) = signal(ExecutionState::new());
@@ -868,6 +887,26 @@ pub fn AppLayout() -> impl IntoView {
         set_dragging_node_type.set(Some(node_type));
     });
 
+    // Callbacks to start graph panel drag
+    let on_bundle_drag_start: Callback<String> = Callback::new(move |bundle_id: String| {
+        let bundle = BUNDLED_GROUPS.iter().find(|b| b.id == bundle_id);
+        let label = bundle.map(|b| b.name.to_string()).unwrap_or_else(|| bundle_id.clone());
+        let (w, h) = bundle.map(|b| graph_bounds(&b.nodes)).unwrap_or((160.0, 100.0));
+        set_dragging_graph_label.set(Some(label));
+        set_drag_preview_w.set(w);
+        set_drag_preview_h.set(h);
+    });
+
+    let on_selection_drag_start: Callback<String> = Callback::new(move |selection_id: String| {
+        let selections = saved_selections.get();
+        let selection = selections.iter().find(|s| s.id == selection_id);
+        let label = selection.map(|s| s.name.clone()).unwrap_or_else(|| "Selection".to_string());
+        let (w, h) = selection.map(|s| graph_bounds(&s.nodes)).unwrap_or((160.0, 100.0));
+        set_dragging_graph_label.set(Some(label));
+        set_drag_preview_w.set(w);
+        set_drag_preview_h.set(h);
+    });
+
     // Handle node drop from palette
     let handle_node_drop = move |node_type: String, x: f64, y: f64| {
         let node_id = next_node_id.get();
@@ -992,15 +1031,20 @@ pub fn AppLayout() -> impl IntoView {
         set_inspector_dragging.set(false);
         // Clear drag preview state
         set_dragging_node_type.set(None);
-        // Clear window draggedNodeType to prevent stale state on subsequent clicks
+        set_dragging_graph_label.set(None);
+        set_drag_preview_w.set(0.0);
+        set_drag_preview_h.set(0.0);
+        // Clear window drag properties to prevent stale state on subsequent clicks
         if let Some(window) = web_sys::window() {
             let _ = js_sys::Reflect::delete_property(&window, &"draggedNodeType".into());
+            let _ = js_sys::Reflect::delete_property(&window, &"draggedBundleId".into());
+            let _ = js_sys::Reflect::delete_property(&window, &"draggedSelectionId".into());
         }
     };
 
     // Global mouse move for drag preview
     let handle_global_mousemove = move |ev: web_sys::MouseEvent| {
-        if dragging_node_type.get().is_some() {
+        if dragging_node_type.get().is_some() || dragging_graph_label.get().is_some() {
             set_drag_x.set(ev.client_x() as f64);
             set_drag_y.set(ev.client_y() as f64);
         }
@@ -1144,6 +1188,8 @@ pub fn AppLayout() -> impl IntoView {
                         on_load_selection={on_load_selection}
                         on_delete_selection={on_delete_selection}
                         on_load_bundle={on_load_bundle}
+                        on_bundle_drag_start={Some(on_bundle_drag_start)}
+                        on_selection_drag_start={Some(on_selection_drag_start)}
                     />
                 </div>
 
@@ -1166,6 +1212,8 @@ pub fn AppLayout() -> impl IntoView {
                         on_node_drop={Some(Callback::from(handle_node_drop))}
                         on_bundle_drop={Some(on_bundle_drop)}
                         on_selection_drop={Some(on_selection_drop)}
+                        zoom={zoom.into()}
+                        set_zoom={set_zoom}
                         left_width={Some(left_width.into())}
                         right_width={Some(right_width.into())}
                         inspector_height={Some(inspector_height.into())}
@@ -1222,7 +1270,19 @@ pub fn AppLayout() -> impl IntoView {
                         >
                             {label}
                         </div>
-                    })
+                    }.into_any())
+                } else if let Some(label) = dragging_graph_label.get() {
+                    Some(view! {
+                        <div
+                            class="drag-preview drag-preview-graph"
+                            style:left={format!("{}px", drag_x.get())}
+                            style:top={format!("{}px", drag_y.get())}
+                            style:width={format!("{}px", drag_preview_w.get() * zoom.get())}
+                            style:height={format!("{}px", drag_preview_h.get() * zoom.get())}
+                        >
+                            {label}
+                        </div>
+                    }.into_any())
                 } else {
                     None
                 }

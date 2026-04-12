@@ -75,6 +75,10 @@ pub fn GraphSection(
     on_load_selection: Callback<SavedSelection>,
     on_delete_selection: Callback<String>,
     on_load_bundle: Callback<BundledGroup>,
+    #[prop(default = None)]
+    on_bundle_drag_start: Option<Callback<String>>,
+    #[prop(default = None)]
+    on_selection_drag_start: Option<Callback<String>>,
 ) -> impl IntoView {
     let (bundled_expanded, set_bundled_expanded) = signal(true);
     let (saved_expanded, set_saved_expanded) = signal(true);
@@ -102,15 +106,17 @@ pub fn GraphSection(
                                 view! {
                                     <div
                                         class="bundle-item"
-                                        draggable=true
-                                        on:dragstart={move |_ev| {
-                                            // Store bundle id in window for canvas to pick up
+                                        on:mousedown={move |ev| {
+                                            ev.prevent_default();
                                             if let Some(window) = web_sys::window() {
                                                 let _ = js_sys::Reflect::set(
                                                     &window,
                                                     &"draggedBundleId".into(),
                                                     &bundle.id.into()
                                                 );
+                                            }
+                                            if let Some(cb) = &on_bundle_drag_start {
+                                                cb.run(bundle.id.to_string());
                                             }
                                         }}
                                         on:click={move |_| {
@@ -153,14 +159,17 @@ pub fn GraphSection(
                                     view! {
                                         <div
                                             class="saved-item"
-                                            draggable=true
-                                            on:dragstart={move |_ev| {
+                                            on:mousedown={move |ev| {
+                                                ev.prevent_default();
                                                 if let Some(window) = web_sys::window() {
                                                     let _ = js_sys::Reflect::set(
                                                         &window,
                                                         &"draggedSelectionId".into(),
                                                         &selection_id_for_drag.clone().into()
                                                     );
+                                                }
+                                                if let Some(cb) = &on_selection_drag_start {
+                                                    cb.run(selection_id_for_drag.clone());
                                                 }
                                             }}
                                             on:click={move |_| {
