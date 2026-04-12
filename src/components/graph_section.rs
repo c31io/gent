@@ -5,6 +5,20 @@ use crate::components::canvas::state::{
 use leptos::prelude::*;
 use std::sync::LazyLock;
 
+fn bundled_node(id: u32, x: f64, y: f64, node_type: &'static str, label: &'static str) -> NodeState {
+    NodeState {
+        id,
+        x,
+        y,
+        node_type: node_type.to_string(),
+        label: label.to_string(),
+        selected: false,
+        status: NodeStatus::Pending,
+        variant: default_variant_for_type(node_type),
+        ports: default_ports_for_type(node_type),
+    }
+}
+
 /// Bundled templates - lazily initialized so allocations are allowed
 pub static BUNDLED_GROUPS: LazyLock<Vec<BundledGroup>> = LazyLock::new(|| {
     vec![BundledGroup {
@@ -12,61 +26,11 @@ pub static BUNDLED_GROUPS: LazyLock<Vec<BundledGroup>> = LazyLock::new(|| {
         name: "Simple LLM Chain",
         description: "Trigger -> Text Input -> Model Config -> Model -> Text Output",
         nodes: vec![
-            NodeState {
-                id: 101,
-                x: 80.0,
-                y: 150.0,
-                node_type: "trigger".to_string(),
-                label: "Trigger".to_string(),
-                selected: false,
-                status: NodeStatus::Pending,
-                variant: default_variant_for_type("trigger"),
-                ports: default_ports_for_type("trigger"),
-            },
-            NodeState {
-                id: 102,
-                x: 300.0,
-                y: 150.0,
-                node_type: "user_input".to_string(),
-                label: "Text Input".to_string(),
-                selected: false,
-                status: NodeStatus::Pending,
-                variant: default_variant_for_type("user_input"),
-                ports: default_ports_for_type("user_input"),
-            },
-            NodeState {
-                id: 103,
-                x: 300.0,
-                y: 280.0,
-                node_type: "model_config".to_string(),
-                label: "Model Config".to_string(),
-                selected: false,
-                status: NodeStatus::Pending,
-                variant: default_variant_for_type("model_config"),
-                ports: default_ports_for_type("model_config"),
-            },
-            NodeState {
-                id: 104,
-                x: 520.0,
-                y: 250.0,
-                node_type: "model".to_string(),
-                label: "Model".to_string(),
-                selected: false,
-                status: NodeStatus::Pending,
-                variant: default_variant_for_type("model"),
-                ports: default_ports_for_type("model"),
-            },
-            NodeState {
-                id: 105,
-                x: 740.0,
-                y: 250.0,
-                node_type: "chat_output".to_string(),
-                label: "Text Output".to_string(),
-                selected: false,
-                status: NodeStatus::Pending,
-                variant: default_variant_for_type("chat_output"),
-                ports: default_ports_for_type("chat_output"),
-            },
+            bundled_node(101, 80.0, 150.0, "trigger", "Trigger"),
+            bundled_node(102, 300.0, 150.0, "user_input", "Text Input"),
+            bundled_node(103, 300.0, 280.0, "model_config", "Model Config"),
+            bundled_node(104, 520.0, 250.0, "model", "Model"),
+            bundled_node(105, 740.0, 250.0, "chat_output", "Text Output"),
         ],
         connections: vec![
             ConnectionState {
@@ -139,7 +103,7 @@ pub fn GraphSection(
                                     <div
                                         class="bundle-item"
                                         draggable=true
-                                        on:dragstart={move |ev| {
+                                        on:dragstart={move |_ev| {
                                             // Store bundle id in window for canvas to pick up
                                             if let Some(window) = web_sys::window() {
                                                 let _ = js_sys::Reflect::set(

@@ -15,6 +15,7 @@ use crate::components::execution_engine::ExecutionState;
 use crate::components::inspector_panel::{InspectorPanel, InspectorTab};
 use crate::components::left_panel::{LeftPanel, NODE_TYPES};
 use crate::components::right_panel::RightPanel;
+use crate::components::graph_section::BUNDLED_GROUPS;
 use crate::components::save_load::{
     copy_to_clipboard, export_to_file, generate_id, import_from_file, load_selection,
     paste_from_clipboard, save_saved_selections_to_storage,
@@ -82,6 +83,28 @@ async fn call_llm_complete(
 }
 
 /// Main application layout with left panel, canvas, and right panel
+fn shift_nodes(nodes: &mut [NodeState], dx: f64, dy: f64) {
+    for n in nodes {
+        n.x += dx;
+        n.y += dy;
+    }
+}
+
+fn center_nodes_at(nodes: &mut [NodeState], x: f64, y: f64) {
+    let (min_x, min_y) = nodes.iter().fold((f64::MAX, f64::MAX), |(mx, my), n| (mx.min(n.x), my.min(n.y)));
+    shift_nodes(nodes, x - min_x, y - min_y);
+}
+
+fn bundle_to_selection(bundle: BundledGroup) -> SavedSelection {
+    SavedSelection {
+        id: bundle.id.to_string(),
+        name: bundle.name.to_string(),
+        created_at: 0.0,
+        nodes: bundle.nodes,
+        connections: bundle.connections,
+    }
+}
+
 #[component]
 pub fn AppLayout() -> impl IntoView {
     // Shared state for panel sizes (in pixels)
@@ -170,6 +193,7 @@ pub fn AppLayout() -> impl IntoView {
     let (toasts, set_toasts) = signal(Vec::<Toast>::new());
     let (next_toast_id, set_next_toast_id) = signal(0u32);
     let (next_connection_id, set_next_connection_id) = signal(100u32);
+    let (load_offset_counter, set_load_offset_counter) = signal(0u32);
 
     // Load saved selections on mount
     {
@@ -216,6 +240,20 @@ pub fn AppLayout() -> impl IntoView {
         }
     };
 
+    // Helper to apply a loaded selection/bundle to canvas state
+    let apply_load_result = move |
+        (new_nodes, new_conns, next_id, next_conn, new_ids):
+        (Vec<NodeState>, Vec<ConnectionState>, u32, u32, HashSet<u32>),
+        toast_msg: &str,
+    | {
+        set_nodes.update(|n| n.extend(new_nodes));
+        set_connections.update(|c| c.extend(new_conns));
+        set_next_node_id.set(next_id);
+        set_next_connection_id.set(next_conn);
+        set_selected_node_ids.set(new_ids);
+        add_toast(toast_msg.to_string(), ToastType::Success);
+    };
+
     // Non-passive window keydown listener
     static KEYDOWN_LISTENER_ADDED: std::sync::Once = std::sync::Once::new();
     let keydown_closure = wasm_bindgen::closure::Closure::wrap(Box::new({
@@ -226,8 +264,8 @@ pub fn AppLayout() -> impl IntoView {
         let set_nodes = set_nodes.clone();
         let set_connections = set_connections.clone();
         let set_deleting_node_id = set_deleting_node_id.clone();
-        let set_next_node_id = set_next_node_id.clone();
-        let set_next_connection_id = set_next_connection_id.clone();
+        let _set_next_node_id = set_next_node_id.clone();
+        let _set_next_connection_id = set_next_connection_id.clone();
         let next_node_id = next_node_id.clone();
         let next_connection_id = next_connection_id.clone();
         let saved_selections = saved_selections.clone();
@@ -287,28 +325,16 @@ pub fn AppLayout() -> impl IntoView {
                     // Paste from clipboard
                     ev.prevent_default();
                     let add_toast_clone = add_toast.clone();
-                    let set_nodes_clone = set_nodes.clone();
-                    let set_connections_clone = set_connections.clone();
-                    let set_next_node_id_clone = set_next_node_id.clone();
-                    let set_next_connection_id_clone = set_next_connection_id.clone();
+                    let apply_load_result_clone = apply_load_result.clone();
                     spawn_local(async move {
                         match paste_from_clipboard().await {
                             Ok(selection) => {
-                                let (new_nodes, new_conns, next_id, next_conn, new_ids) =
-                                    load_selection(
-                                        selection,
-                                        next_node_id.get(),
-                                        next_connection_id.get(),
-                                    );
-                                set_nodes_clone.update(|n| n.extend(new_nodes));
-                                set_connections_clone.update(|c| c.extend(new_conns));
-                                set_next_node_id_clone.set(next_id);
-                                set_next_connection_id_clone.set(next_conn);
-                                set_selected_node_ids.set(new_ids);
-                                add_toast_clone(
-                                    "Pasted from clipboard".to_string(),
-                                    ToastType::Success,
+                                let result = load_selection(
+                                    selection,
+                                    next_node_id.get(),
+                                    next_connection_id.get(),
                                 );
+                                apply_load_result_clone(result, "Pasted from clipboard");
                             }
                             Err(e) => {
                                 add_toast_clone(format!("Paste failed: {}", e), ToastType::Error)
@@ -392,29 +418,16 @@ pub fn AppLayout() -> impl IntoView {
                     // Import from file
                     ev.prevent_default();
                     let add_toast_clone = add_toast.clone();
-                    let set_nodes_clone = set_nodes.clone();
-                    let set_connections_clone = set_connections.clone();
-                    let set_next_node_id_clone = set_next_node_id.clone();
-                    let set_next_connection_id_clone = set_next_connection_id.clone();
+                    let apply_load_result_clone = apply_load_result.clone();
                     spawn_local(async move {
                         match import_from_file().await {
                             Ok((selection, _name)) => {
-                                // Generate new IDs and remap
-                                let (new_nodes, new_conns, next_id, next_conn, new_ids) =
-                                    load_selection(
-                                        selection,
-                                        next_node_id.get(),
-                                        next_connection_id.get(),
-                                    );
-                                set_nodes_clone.update(|n| n.extend(new_nodes));
-                                set_connections_clone.update(|c| c.extend(new_conns));
-                                set_next_node_id_clone.set(next_id);
-                                set_next_connection_id_clone.set(next_conn);
-                                set_selected_node_ids.set(new_ids);
-                                add_toast_clone(
-                                    "Imported from file".to_string(),
-                                    ToastType::Success,
+                                let result = load_selection(
+                                    selection,
+                                    next_node_id.get(),
+                                    next_connection_id.get(),
                                 );
+                                apply_load_result_clone(result, "Imported from file");
                             }
                             Err(e) => {
                                 add_toast_clone(format!("Import failed: {}", e), ToastType::Error)
@@ -1017,60 +1030,83 @@ pub fn AppLayout() -> impl IntoView {
 
     // Callback to load a saved selection into canvas
     let on_load_selection = {
-        let set_nodes = set_nodes.clone();
-        let set_connections = set_connections.clone();
-        let set_next_node_id = set_next_node_id.clone();
-        let set_next_connection_id = set_next_connection_id.clone();
-        let set_selected_node_ids = set_selected_node_ids.clone();
         let next_node_id = next_node_id.clone();
         let next_connection_id = next_connection_id.clone();
-        let add_toast = add_toast.clone();
+        let apply_load_result = apply_load_result.clone();
+        let load_offset_counter = load_offset_counter.clone();
+        let set_load_offset_counter = set_load_offset_counter.clone();
         Callback::new(move |selection: SavedSelection| {
-            let (new_nodes, new_conns, next_id, next_conn, new_ids) =
+            let (mut new_nodes, new_conns, next_id, next_conn, new_ids) =
                 crate::components::save_load::load_selection(
                     selection,
                     next_node_id.get(),
                     next_connection_id.get(),
                 );
-            set_nodes.update(|n| n.extend(new_nodes));
-            set_connections.update(|c| c.extend(new_conns));
-            set_next_node_id.set(next_id);
-            set_next_connection_id.set(next_conn);
-            set_selected_node_ids.set(new_ids);
-            add_toast("Selection loaded".to_string(), ToastType::Success);
+            let c = load_offset_counter.get();
+            shift_nodes(&mut new_nodes, c as f64 * 20.0, c as f64 * 20.0);
+            set_load_offset_counter.set(c + 1);
+            apply_load_result((new_nodes, new_conns, next_id, next_conn, new_ids), "Selection loaded");
         })
     };
 
     // Callback to load a bundled group into canvas
     let on_load_bundle = {
-        let set_nodes = set_nodes.clone();
-        let set_connections = set_connections.clone();
-        let set_next_node_id = set_next_node_id.clone();
-        let set_next_connection_id = set_next_connection_id.clone();
-        let set_selected_node_ids = set_selected_node_ids.clone();
         let next_node_id = next_node_id.clone();
         let next_connection_id = next_connection_id.clone();
-        let add_toast = add_toast.clone();
+        let apply_load_result = apply_load_result.clone();
+        let load_offset_counter = load_offset_counter.clone();
+        let set_load_offset_counter = set_load_offset_counter.clone();
         Callback::new(move |bundle: BundledGroup| {
-            let selection = SavedSelection {
-                id: bundle.id.to_string(),
-                name: bundle.name.to_string(),
-                created_at: 0.0,
-                nodes: bundle.nodes,
-                connections: bundle.connections,
-            };
-            let (new_nodes, new_conns, next_id, next_conn, new_ids) =
+            let selection = bundle_to_selection(bundle);
+            let (mut new_nodes, new_conns, next_id, next_conn, new_ids) =
                 crate::components::save_load::load_selection(
                     selection,
                     next_node_id.get(),
                     next_connection_id.get(),
                 );
-            set_nodes.update(|n| n.extend(new_nodes));
-            set_connections.update(|c| c.extend(new_conns));
-            set_next_node_id.set(next_id);
-            set_next_connection_id.set(next_conn);
-            set_selected_node_ids.set(new_ids);
-            add_toast("Bundle loaded".to_string(), ToastType::Success);
+            let c = load_offset_counter.get();
+            shift_nodes(&mut new_nodes, c as f64 * 20.0, c as f64 * 20.0);
+            set_load_offset_counter.set(c + 1);
+            apply_load_result((new_nodes, new_conns, next_id, next_conn, new_ids), "Bundle loaded");
+        })
+    };
+
+    // Callback when a bundled group is dropped on the canvas
+    let on_bundle_drop = {
+        let next_node_id = next_node_id.clone();
+        let next_connection_id = next_connection_id.clone();
+        let apply_load_result = apply_load_result.clone();
+        Callback::new(move |(bundle_id, x, y): (String, f64, f64)| {
+            let Some(bundle) = BUNDLED_GROUPS.iter().find(|b| b.id == bundle_id).cloned() else { return };
+            let selection = bundle_to_selection(bundle);
+            let (mut new_nodes, new_conns, next_id, next_conn, new_ids) =
+                crate::components::save_load::load_selection(
+                    selection,
+                    next_node_id.get(),
+                    next_connection_id.get(),
+                );
+            center_nodes_at(&mut new_nodes, x, y);
+            apply_load_result((new_nodes, new_conns, next_id, next_conn, new_ids), "Bundle loaded");
+        })
+    };
+
+    // Callback when a saved selection is dropped on the canvas
+    let on_selection_drop = {
+        let next_node_id = next_node_id.clone();
+        let next_connection_id = next_connection_id.clone();
+        let saved_selections = saved_selections.clone();
+        let apply_load_result = apply_load_result.clone();
+        Callback::new(move |(selection_id, x, y): (String, f64, f64)| {
+            let selections = saved_selections.get();
+            let Some(selection) = selections.iter().find(|s| s.id == selection_id).cloned() else { return };
+            let (mut new_nodes, new_conns, next_id, next_conn, new_ids) =
+                crate::components::save_load::load_selection(
+                    selection,
+                    next_node_id.get(),
+                    next_connection_id.get(),
+                );
+            center_nodes_at(&mut new_nodes, x, y);
+            apply_load_result((new_nodes, new_conns, next_id, next_conn, new_ids), "Selection loaded");
         })
     };
 
@@ -1128,6 +1164,8 @@ pub fn AppLayout() -> impl IntoView {
                         set_connections={set_connections}
                         deleting_node_id={Some(deleting_node_id.into())}
                         on_node_drop={Some(Callback::from(handle_node_drop))}
+                        on_bundle_drop={Some(on_bundle_drop)}
+                        on_selection_drop={Some(on_selection_drop)}
                         left_width={Some(left_width.into())}
                         right_width={Some(right_width.into())}
                         inspector_height={Some(inspector_height.into())}

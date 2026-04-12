@@ -53,6 +53,12 @@ pub fn Canvas(
     /// Callback when a node is dropped from the palette (receives node_type, canvas x, y)
     #[prop(default = None)]
     on_node_drop: Option<Callback<(String, f64, f64)>>,
+    /// Callback when a bundled group is dropped on the canvas (receives bundle_id, canvas x, y)
+    #[prop(default = None)]
+    on_bundle_drop: Option<Callback<(String, f64, f64)>>,
+    /// Callback when a saved selection is dropped on the canvas (receives selection_id, canvas x, y)
+    #[prop(default = None)]
+    on_selection_drop: Option<Callback<(String, f64, f64)>>,
     /// Left panel width signal (for calculating canvas offset)
     #[prop(default = None)]
     left_width: Option<Signal<i32>>,
@@ -503,9 +509,54 @@ pub fn Canvas(
         }
     };
 
+    // Helper to get dragged bundle id from window
+    let get_dragged_bundle_id = || -> Option<String> {
+        let window = web_sys::window()?;
+        let val = js_sys::Reflect::get(&window, &"draggedBundleId".into()).ok()?;
+        if val.is_undefined() || val.is_null() {
+            None
+        } else {
+            val.as_string()
+        }
+    };
+
+    // Helper to clear dragged bundle id
+    let clear_dragged_bundle_id = || {
+        if let Some(window) = web_sys::window() {
+            let _ = js_sys::Reflect::delete_property(&window, &"draggedBundleId".into());
+        }
+    };
+
+    // Helper to get dragged selection id from window
+    let get_dragged_selection_id = || -> Option<String> {
+        let window = web_sys::window()?;
+        let val = js_sys::Reflect::get(&window, &"draggedSelectionId".into()).ok()?;
+        if val.is_undefined() || val.is_null() {
+            None
+        } else {
+            val.as_string()
+        }
+    };
+
+    // Helper to clear dragged selection id
+    let clear_dragged_selection_id = || {
+        if let Some(window) = web_sys::window() {
+            let _ = js_sys::Reflect::delete_property(&window, &"draggedSelectionId".into());
+        }
+    };
+
     let handle_mouse_up = move |ev: web_sys::MouseEvent| {
         set_dragging_node_id.set(None);
         set_is_panning.set(false);
+
+        let compute_drop_coords = || -> (f64, f64) {
+            let canvas_offset_x = get_canvas_offset_x();
+            let zoom_val = zoom.get();
+            (
+                (ev.client_x() as f64 - canvas_offset_x - pan_x.get()) / zoom_val,
+                (ev.client_y() as f64 - pan_y.get()) / zoom_val,
+            )
+        };
 
         // Complete rubber-band selection
         if is_selecting.get() {
@@ -538,17 +589,27 @@ pub fn Canvas(
         // Check if a palette node is being dropped
         if let Some(callback) = &on_node_drop {
             if let Some(node_type) = get_dragged_node_type() {
-                let canvas_offset_x = get_canvas_offset_x();
-                let canvas_offset_y = 0.0;
-                let pan = pan_x.get();
-                let pan_y_val = pan_y.get();
-                let zoom_val = zoom.get();
-
-                let canvas_x = (ev.client_x() as f64 - canvas_offset_x - pan) / zoom_val;
-                let canvas_y = (ev.client_y() as f64 - canvas_offset_y - pan_y_val) / zoom_val;
-
+                let (canvas_x, canvas_y) = compute_drop_coords();
                 callback.run((node_type, canvas_x, canvas_y));
                 clear_dragged_node_type();
+            }
+        }
+
+        // Check if a bundled group is being dropped
+        if let Some(callback) = &on_bundle_drop {
+            if let Some(bundle_id) = get_dragged_bundle_id() {
+                let (canvas_x, canvas_y) = compute_drop_coords();
+                callback.run((bundle_id, canvas_x, canvas_y));
+                clear_dragged_bundle_id();
+            }
+        }
+
+        // Check if a saved selection is being dropped
+        if let Some(callback) = &on_selection_drop {
+            if let Some(selection_id) = get_dragged_selection_id() {
+                let (canvas_x, canvas_y) = compute_drop_coords();
+                callback.run((selection_id, canvas_x, canvas_y));
+                clear_dragged_selection_id();
             }
         }
 
