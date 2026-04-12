@@ -7,8 +7,8 @@ use wasm_bindgen_futures::spawn_local;
 
 use crate::components::canvas::geometry::is_text_input_keyboard;
 use crate::components::canvas::state::{
-    default_ports_for_type, default_variant_for_type, ConnectionState, NodeState, NodeStatus,
-    SavedSelection,
+    default_ports_for_type, default_variant_for_type, BundledGroup, ConnectionState, NodeState,
+    NodeStatus, SavedSelection,
 };
 use crate::components::canvas::Canvas;
 use crate::components::execution_engine::ExecutionState;
@@ -294,15 +294,17 @@ pub fn AppLayout() -> impl IntoView {
                     spawn_local(async move {
                         match paste_from_clipboard().await {
                             Ok(selection) => {
-                                let (new_nodes, new_conns, next_id, next_conn) = load_selection(
-                                    selection,
-                                    next_node_id.get(),
-                                    next_connection_id.get(),
-                                );
+                                let (new_nodes, new_conns, next_id, next_conn, new_ids) =
+                                    load_selection(
+                                        selection,
+                                        next_node_id.get(),
+                                        next_connection_id.get(),
+                                    );
                                 set_nodes_clone.update(|n| n.extend(new_nodes));
                                 set_connections_clone.update(|c| c.extend(new_conns));
                                 set_next_node_id_clone.set(next_id);
                                 set_next_connection_id_clone.set(next_conn);
+                                set_selected_node_ids.set(new_ids);
                                 add_toast_clone(
                                     "Pasted from clipboard".to_string(),
                                     ToastType::Success,
@@ -398,15 +400,17 @@ pub fn AppLayout() -> impl IntoView {
                         match import_from_file().await {
                             Ok((selection, _name)) => {
                                 // Generate new IDs and remap
-                                let (new_nodes, new_conns, next_id, next_conn) = load_selection(
-                                    selection,
-                                    next_node_id.get(),
-                                    next_connection_id.get(),
-                                );
+                                let (new_nodes, new_conns, next_id, next_conn, new_ids) =
+                                    load_selection(
+                                        selection,
+                                        next_node_id.get(),
+                                        next_connection_id.get(),
+                                    );
                                 set_nodes_clone.update(|n| n.extend(new_nodes));
                                 set_connections_clone.update(|c| c.extend(new_conns));
                                 set_next_node_id_clone.set(next_id);
                                 set_next_connection_id_clone.set(next_conn);
+                                set_selected_node_ids.set(new_ids);
                                 add_toast_clone(
                                     "Imported from file".to_string(),
                                     ToastType::Success,
@@ -1017,11 +1021,12 @@ pub fn AppLayout() -> impl IntoView {
         let set_connections = set_connections.clone();
         let set_next_node_id = set_next_node_id.clone();
         let set_next_connection_id = set_next_connection_id.clone();
+        let set_selected_node_ids = set_selected_node_ids.clone();
         let next_node_id = next_node_id.clone();
         let next_connection_id = next_connection_id.clone();
         let add_toast = add_toast.clone();
         Callback::new(move |selection: SavedSelection| {
-            let (new_nodes, new_conns, next_id, next_conn) =
+            let (new_nodes, new_conns, next_id, next_conn, new_ids) =
                 crate::components::save_load::load_selection(
                     selection,
                     next_node_id.get(),
@@ -1031,7 +1036,41 @@ pub fn AppLayout() -> impl IntoView {
             set_connections.update(|c| c.extend(new_conns));
             set_next_node_id.set(next_id);
             set_next_connection_id.set(next_conn);
+            set_selected_node_ids.set(new_ids);
             add_toast("Selection loaded".to_string(), ToastType::Success);
+        })
+    };
+
+    // Callback to load a bundled group into canvas
+    let on_load_bundle = {
+        let set_nodes = set_nodes.clone();
+        let set_connections = set_connections.clone();
+        let set_next_node_id = set_next_node_id.clone();
+        let set_next_connection_id = set_next_connection_id.clone();
+        let set_selected_node_ids = set_selected_node_ids.clone();
+        let next_node_id = next_node_id.clone();
+        let next_connection_id = next_connection_id.clone();
+        let add_toast = add_toast.clone();
+        Callback::new(move |bundle: BundledGroup| {
+            let selection = SavedSelection {
+                id: bundle.id.to_string(),
+                name: bundle.name.to_string(),
+                created_at: 0.0,
+                nodes: bundle.nodes,
+                connections: bundle.connections,
+            };
+            let (new_nodes, new_conns, next_id, next_conn, new_ids) =
+                crate::components::save_load::load_selection(
+                    selection,
+                    next_node_id.get(),
+                    next_connection_id.get(),
+                );
+            set_nodes.update(|n| n.extend(new_nodes));
+            set_connections.update(|c| c.extend(new_conns));
+            set_next_node_id.set(next_id);
+            set_next_connection_id.set(next_conn);
+            set_selected_node_ids.set(new_ids);
+            add_toast("Bundle loaded".to_string(), ToastType::Success);
         })
     };
 
@@ -1068,6 +1107,7 @@ pub fn AppLayout() -> impl IntoView {
                         saved_selections={saved_selections.into()}
                         on_load_selection={on_load_selection}
                         on_delete_selection={on_delete_selection}
+                        on_load_bundle={on_load_bundle}
                     />
                 </div>
 

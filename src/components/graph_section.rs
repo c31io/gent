@@ -1,17 +1,109 @@
-use crate::components::canvas::state::{BundledGroup, SavedSelection};
+use crate::components::canvas::state::{
+    BundledGroup, ConnectionState, NodeState, NodeStatus, SavedSelection,
+    default_ports_for_type, default_variant_for_type,
+};
 use leptos::prelude::*;
+use std::sync::LazyLock;
 
-/// Bundled templates - these would be loaded from static data
-pub static BUNDLED_GROUPS: &[BundledGroup] = &[
-    // Example bundled group - a simple chain
-    // BundledGroup {
-    //     id: "simple_chain",
-    //     name: "Simple Chain",
-    //     description: "A basic 3-node chain",
-    //     nodes: vec![],
-    //     connections: vec![],
-    // },
-];
+/// Bundled templates - lazily initialized so allocations are allowed
+pub static BUNDLED_GROUPS: LazyLock<Vec<BundledGroup>> = LazyLock::new(|| {
+    vec![BundledGroup {
+        id: "simple_llm_chain",
+        name: "Simple LLM Chain",
+        description: "Trigger -> Text Input -> Model Config -> Model -> Text Output",
+        nodes: vec![
+            NodeState {
+                id: 101,
+                x: 80.0,
+                y: 150.0,
+                node_type: "trigger".to_string(),
+                label: "Trigger".to_string(),
+                selected: false,
+                status: NodeStatus::Pending,
+                variant: default_variant_for_type("trigger"),
+                ports: default_ports_for_type("trigger"),
+            },
+            NodeState {
+                id: 102,
+                x: 300.0,
+                y: 150.0,
+                node_type: "user_input".to_string(),
+                label: "Text Input".to_string(),
+                selected: false,
+                status: NodeStatus::Pending,
+                variant: default_variant_for_type("user_input"),
+                ports: default_ports_for_type("user_input"),
+            },
+            NodeState {
+                id: 103,
+                x: 300.0,
+                y: 280.0,
+                node_type: "model_config".to_string(),
+                label: "Model Config".to_string(),
+                selected: false,
+                status: NodeStatus::Pending,
+                variant: default_variant_for_type("model_config"),
+                ports: default_ports_for_type("model_config"),
+            },
+            NodeState {
+                id: 104,
+                x: 520.0,
+                y: 250.0,
+                node_type: "model".to_string(),
+                label: "Model".to_string(),
+                selected: false,
+                status: NodeStatus::Pending,
+                variant: default_variant_for_type("model"),
+                ports: default_ports_for_type("model"),
+            },
+            NodeState {
+                id: 105,
+                x: 740.0,
+                y: 250.0,
+                node_type: "chat_output".to_string(),
+                label: "Text Output".to_string(),
+                selected: false,
+                status: NodeStatus::Pending,
+                variant: default_variant_for_type("chat_output"),
+                ports: default_ports_for_type("chat_output"),
+            },
+        ],
+        connections: vec![
+            ConnectionState {
+                id: 201,
+                source_node_id: 101,
+                source_port_name: "output".to_string(),
+                target_node_id: 102,
+                target_port_name: "trigger".to_string(),
+                selected: false,
+            },
+            ConnectionState {
+                id: 202,
+                source_node_id: 102,
+                source_port_name: "output".to_string(),
+                target_node_id: 104,
+                target_port_name: "prompt".to_string(),
+                selected: false,
+            },
+            ConnectionState {
+                id: 203,
+                source_node_id: 103,
+                source_port_name: "config".to_string(),
+                target_node_id: 104,
+                target_port_name: "config".to_string(),
+                selected: false,
+            },
+            ConnectionState {
+                id: 204,
+                source_node_id: 104,
+                source_port_name: "text".to_string(),
+                target_node_id: 105,
+                target_port_name: "response".to_string(),
+                selected: false,
+            },
+        ],
+    }]
+});
 
 #[component]
 pub fn GraphSection(

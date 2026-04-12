@@ -185,11 +185,10 @@ pub fn LeftPanel(
     on_load_selection: Callback<SavedSelection>,
     /// Callback when a saved selection is deleted
     on_delete_selection: Callback<String>,
+    /// Callback when a bundled group is loaded
+    on_load_bundle: Callback<BundledGroup>,
 ) -> impl IntoView {
     let (active_tab, set_active_tab) = signal(Tab::default());
-
-    // Default no-op callback for bundle loading (not yet implemented)
-    let default_on_load_bundle = Callback::new(|_: BundledGroup| {});
 
     view! {
         <>
@@ -205,7 +204,7 @@ pub fn LeftPanel(
                             saved_selections={saved_selections}
                             on_load_selection={on_load_selection}
                             on_delete_selection={on_delete_selection}
-                            on_load_bundle={default_on_load_bundle}
+                            on_load_bundle={on_load_bundle}
                         />
                     </div>
                 }.into_any(),

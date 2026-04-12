@@ -1,5 +1,5 @@
 use crate::components::canvas::state::{ConnectionState, NodeState, SavedSelection};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
@@ -67,10 +67,11 @@ pub fn load_selection(
     selection: SavedSelection,
     next_node_id: u32,
     next_conn_id: u32,
-) -> (Vec<NodeState>, Vec<ConnectionState>, u32, u32) {
+) -> (Vec<NodeState>, Vec<ConnectionState>, u32, u32, HashSet<u32>) {
     let mut id_map: HashMap<u32, u32> = HashMap::new();
     let mut new_nodes = Vec::new();
     let mut new_conns = Vec::new();
+    let mut new_node_ids = HashSet::new();
     let mut current_node_id = next_node_id;
     let mut current_conn_id = next_conn_id;
 
@@ -81,6 +82,7 @@ pub fn load_selection(
         let mut new_node = node;
         new_node.id = current_node_id;
         new_nodes.push(new_node);
+        new_node_ids.insert(current_node_id);
         current_node_id += 1;
     }
 
@@ -99,7 +101,7 @@ pub fn load_selection(
         }
     }
 
-    (new_nodes, new_conns, current_node_id, current_conn_id)
+    (new_nodes, new_conns, current_node_id, current_conn_id, new_node_ids)
 }
 
 /// Export a saved selection to a downloadable JSON file
