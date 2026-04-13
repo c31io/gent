@@ -114,10 +114,17 @@ Implemented in `app_layout.rs` via a window `keydown` listener:
 - `Ctrl+E` — Export selection to file
 - `Ctrl+I` — Import from file
 - `Ctrl+A` — Select all nodes
+- `Ctrl+Z` — Undo last change
+- `Ctrl+Shift+Z` — Redo last undone change
 - `Delete` / `Backspace` — Delete selected nodes
 - `Escape` — Clear selection
 
 Shortcuts are ignored when focus is in a text input.
+
+### Undo/Redo System
+- **Snapshot-based history**: A reactive `Effect` in `app_layout.rs` observes all undoable signals (`nodes`, `connections`, `selected_node_ids`, `next_node_id`, `next_connection_id`). When they change, the previous state is pushed onto an `UndoManager` stack (capped at 50 entries).
+- **Scope**: Undo covers graph content and selection. It does **not** cover view state (pan/zoom), execution trace, or panel sizes.
+- **Implementation**: `src/components/undo.rs` defines `GraphSnapshot` and `UndoManager`. `StoredValue<bool>` is used to suppress snapshot pushes during undo/redo restoration.
 
 ### Plugin System
 - **WASM plugins**: Loaded via `wasmtime` + `wasmtime-wasi` (see `src-tauri/src/plugins/wasm_loader.rs`)

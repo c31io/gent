@@ -11,3 +11,4 @@ pub mod right_panel;
 pub mod save_load;
 pub mod script_editor;
 pub mod toast;
+pub mod undo;
