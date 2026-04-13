@@ -227,13 +227,13 @@ pub fn AppLayout() -> impl IntoView {
         next_connection_id: next_connection_id.get(),
     });
     let is_undoing = StoredValue::new(false);
-    let pending_snapshot_id = StoredValue::new(0u64);
+    let (undo_suppressed, set_undo_suppressed) = signal(false);
 
     // Snapshot effect: observes all undoable signals and pushes the previous state
     // onto the undo stack whenever a change occurs (unless the change was triggered
     // by an undo/redo operation).
-    // Rapid successive changes are coalesced into a single snapshot via a 100ms
-    // debounce so that node drags become one undo step instead of many.
+    // During continuous interactions (drag, selection box, connection drag) pushes
+    // are suppressed so the entire gesture becomes a single undo step.
     Effect::new(move |_| {
         let current = GraphSnapshot {
             nodes: nodes.get(),
@@ -245,29 +245,60 @@ pub fn AppLayout() -> impl IntoView {
 
         if is_undoing.get_value() {
             is_undoing.set_value(false);
-            pending_snapshot_id.update_value(|id| *id += 1);
             last_snapshot.set_value(current);
+        } else if undo_suppressed.get() {
+            // Swallow intermediate changes during drag/continuous interaction.
         } else {
             let prev = last_snapshot.get_value();
             if prev != current {
-                pending_snapshot_id.update_value(|id| *id += 1);
-                let snapshot_id = pending_snapshot_id.get_value();
-                let prev_clone = prev.clone();
-                let current_clone = current.clone();
-                let undo_manager = undo_manager.clone();
-                let last_snapshot = last_snapshot.clone();
-                let pending_snapshot_id = pending_snapshot_id.clone();
-                spawn_local(async move {
-                    TimeoutFuture::new(100).await;
-                    if pending_snapshot_id.get_value() != snapshot_id {
-                        return;
-                    }
-                    undo_manager.update_value(|um| um.push(prev_clone));
-                    last_snapshot.set_value(current_clone);
-                });
+                undo_manager.update_value(|um| um.push(prev));
+                last_snapshot.set_value(current);
             }
         }
     });
+
+    let begin_undo_suppression = {
+        let undo_manager = undo_manager.clone();
+        let nodes = nodes.clone();
+        let connections = connections.clone();
+        let selected_node_ids = selected_node_ids.clone();
+        let next_node_id = next_node_id.clone();
+        let next_connection_id = next_connection_id.clone();
+        move || {
+            if !undo_suppressed.get() {
+                let prev = GraphSnapshot {
+                    nodes: nodes.get(),
+                    connections: connections.get(),
+                    selected_node_ids: selected_node_ids.get(),
+                    next_node_id: next_node_id.get(),
+                    next_connection_id: next_connection_id.get(),
+                };
+                undo_manager.update_value(|um| um.push(prev));
+                set_undo_suppressed.set(true);
+            }
+        }
+    };
+
+    let end_undo_suppression = {
+        let last_snapshot = last_snapshot.clone();
+        let nodes = nodes.clone();
+        let connections = connections.clone();
+        let selected_node_ids = selected_node_ids.clone();
+        let next_node_id = next_node_id.clone();
+        let next_connection_id = next_connection_id.clone();
+        move || {
+            if undo_suppressed.get() {
+                set_undo_suppressed.set(false);
+                last_snapshot.set_value(GraphSnapshot {
+                    nodes: nodes.get(),
+                    connections: connections.get(),
+                    selected_node_ids: selected_node_ids.get(),
+                    next_node_id: next_node_id.get(),
+                    next_connection_id: next_connection_id.get(),
+                });
+            }
+        }
+    };
 
     // Load saved selections on mount
     {
@@ -1165,6 +1196,8 @@ pub fn AppLayout() -> impl IntoView {
                         on_trigger={Some(Callback::new(handle_trigger))}
                         on_text_change={Some(Callback::new(move |(node_id, new_text)| handle_text_change(node_id, new_text)))}
                         on_node_right_click={Some(Callback::new(handle_node_inspect))}
+                        on_interaction_start={Some(Callback::new(move |_| begin_undo_suppression()))}
+                        on_interaction_end={Some(Callback::new(move |_| end_undo_suppression()))}
                     />
 
                     <div

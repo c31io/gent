@@ -72,6 +72,12 @@ pub fn Canvas(
     /// Args: (node_id, is_double_click)
     #[prop(default = None)]
     on_node_right_click: Option<Callback<(u32, bool)>>,
+    /// Called when a continuous interaction starts (drag, selection, connection drag)
+    #[prop(default = None)]
+    on_interaction_start: Option<Callback<()>>,
+    /// Called when a continuous interaction ends
+    #[prop(default = None)]
+    on_interaction_end: Option<Callback<()>>,
 ) -> impl IntoView {
     // Canvas transform state (local to canvas)
     let (pan_x, set_pan_x) = signal(0.0f64);
@@ -178,6 +184,9 @@ pub fn Canvas(
                 current_y: sy,
                 is_dragging: false,
             }));
+            if let Some(callback) = &on_interaction_start {
+                callback.run(());
+            }
         };
 
     let handle_input_drag_end = move |node_id: u32, target_port_name: String, _x: f64, _y: f64| {
@@ -271,6 +280,9 @@ pub fn Canvas(
                 current_y: sy,
                 is_dragging: false,
             }));
+            if let Some(callback) = &on_interaction_start {
+                callback.run(());
+            }
         }
     });
 
@@ -366,6 +378,9 @@ pub fn Canvas(
                         set_drag_initial_positions.set(initial_positions);
                         set_dragging_node_id.set(Some(node_id));
                         set_is_panning.set(false);
+                        if let Some(callback) = &on_interaction_start {
+                            callback.run(());
+                        }
                         return;
                     }
                 }
@@ -381,6 +396,9 @@ pub fn Canvas(
                 set_selection_drag_start.set(Some((canvas_x, canvas_y)));
                 set_is_selecting.set(true);
                 set_selection_box.set(Some((canvas_x, canvas_y, canvas_x, canvas_y)));
+                if let Some(callback) = &on_interaction_start {
+                    callback.run(());
+                }
             }
         }
     };
@@ -539,6 +557,9 @@ pub fn Canvas(
     };
 
     let handle_mouse_up = move |ev: web_sys::MouseEvent| {
+        let was_interacting = dragging_node_id.get().is_some()
+            || is_selecting.get()
+            || dragging_connection.get().is_some();
         set_dragging_node_id.set(None);
         set_is_panning.set(false);
 
@@ -625,6 +646,11 @@ pub fn Canvas(
                 // Clicked but didn't drag - cancel the connection
                 set_dragging_connection.set(None);
                 set_rerouting_from.set(None);
+            }
+        }
+        if was_interacting {
+            if let Some(callback) = &on_interaction_end {
+                callback.run(());
             }
         }
     };

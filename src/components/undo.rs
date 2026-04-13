@@ -28,6 +28,9 @@ impl UndoManager {
     }
 
     pub fn push(&mut self, snapshot: GraphSnapshot) {
+        if self.undo_stack.last() == Some(&snapshot) {
+            return;
+        }
         self.undo_stack.push(snapshot);
         self.redo_stack.clear();
         if self.undo_stack.len() > self.max_size {
