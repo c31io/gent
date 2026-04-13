@@ -227,10 +227,13 @@ pub fn AppLayout() -> impl IntoView {
         next_connection_id: next_connection_id.get(),
     });
     let is_undoing = StoredValue::new(false);
+    let pending_snapshot_id = StoredValue::new(0u64);
 
     // Snapshot effect: observes all undoable signals and pushes the previous state
     // onto the undo stack whenever a change occurs (unless the change was triggered
     // by an undo/redo operation).
+    // Rapid successive changes are coalesced into a single snapshot via a 100ms
+    // debounce so that node drags become one undo step instead of many.
     Effect::new(move |_| {
         let current = GraphSnapshot {
             nodes: nodes.get(),
@@ -242,12 +245,26 @@ pub fn AppLayout() -> impl IntoView {
 
         if is_undoing.get_value() {
             is_undoing.set_value(false);
+            pending_snapshot_id.update_value(|id| *id += 1);
             last_snapshot.set_value(current);
         } else {
             let prev = last_snapshot.get_value();
             if prev != current {
-                undo_manager.update_value(|um| um.push(prev));
-                last_snapshot.set_value(current);
+                pending_snapshot_id.update_value(|id| *id += 1);
+                let snapshot_id = pending_snapshot_id.get_value();
+                let prev_clone = prev.clone();
+                let current_clone = current.clone();
+                let undo_manager = undo_manager.clone();
+                let last_snapshot = last_snapshot.clone();
+                let pending_snapshot_id = pending_snapshot_id.clone();
+                spawn_local(async move {
+                    TimeoutFuture::new(100).await;
+                    if pending_snapshot_id.get_value() != snapshot_id {
+                        return;
+                    }
+                    undo_manager.update_value(|um| um.push(prev_clone));
+                    last_snapshot.set_value(current_clone);
+                });
             }
         }
     });
