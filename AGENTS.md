@@ -33,6 +33,7 @@ C:\Users\c31io\Documents\GitHub\gent
 │   │   ├── execution_trace.rs  # Trace display logic
 │   │   ├── save_load.rs    # Persistence, clipboard, import/export
 │   │   ├── toast.rs        # Toast notification system
+│   │   ├── undo.rs         # Snapshot-based undo manager
 │   │   ├── plugin_manager.rs   # Plugin management UI
 │   │   ├── script_editor.rs    # Script editor UI
 │   │   └── graph_section.rs    # Saved selections / bundled groups UI
@@ -124,7 +125,9 @@ Shortcuts are ignored when focus is in a text input.
 ### Undo/Redo System
 - **Snapshot-based history**: A reactive `Effect` in `app_layout.rs` observes all undoable signals (`nodes`, `connections`, `selected_node_ids`, `next_node_id`, `next_connection_id`). When they change, the previous state is pushed onto an `UndoManager` stack (capped at 50 entries).
 - **Scope**: Undo covers graph content and selection. It does **not** cover view state (pan/zoom), execution trace, or panel sizes.
-- **Implementation**: `src/components/undo.rs` defines `GraphSnapshot` and `UndoManager`. `StoredValue<bool>` is used to suppress snapshot pushes during undo/redo restoration.
+- **Implementation**: `src/components/undo.rs` defines `GraphSnapshot` and `UndoManager`.
+- **Suppression during continuous interactions**: `Canvas` reports drag/selection/connection gestures to `AppLayout` via `on_interaction_start` / `on_interaction_end` props. While an interaction is active, snapshot pushes are suppressed (`undo_suppressed` signal) so the entire gesture becomes a single undo step. The pre-interaction snapshot is saved when the gesture starts and pushed only if the state actually changed when it ends.
+- **Undo/redo restoration guard**: `StoredValue<bool>` (`is_undoing`) prevents the Effect from recording a new snapshot while a restore is in progress.
 
 ### Plugin System
 - **WASM plugins**: Loaded via `wasmtime` + `wasmtime-wasi` (see `src-tauri/src/plugins/wasm_loader.rs`)

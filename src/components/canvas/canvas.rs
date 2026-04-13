@@ -287,8 +287,14 @@ pub fn Canvas(
     });
 
     let cancel_connection_drag: Callback<(), ()> = Callback::new(move |_args: ()| {
+        let had_connection = dragging_connection.get().is_some();
         set_dragging_connection.set(None);
         set_rerouting_from.set(None);
+        if had_connection {
+            if let Some(callback) = &on_interaction_end {
+                callback.run(());
+            }
+        }
     });
 
     let handle_node_right_click = move |node_id: u32, is_double: bool| {
@@ -304,6 +310,10 @@ pub fn Canvas(
             if let Some(dc) = dragging_connection.get() {
                 if dc.is_dragging {
                     set_dragging_connection.set(None);
+                    set_rerouting_from.set(None);
+                    if let Some(callback) = &on_interaction_end {
+                        callback.run(());
+                    }
                     return;
                 }
             }

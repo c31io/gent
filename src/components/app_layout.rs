@@ -219,15 +219,19 @@ pub fn AppLayout() -> impl IntoView {
 
     // Undo/redo state
     let undo_manager = StoredValue::new(UndoManager::new());
-    let last_snapshot = StoredValue::new(GraphSnapshot {
+    let is_undoing = StoredValue::new(false);
+    let (undo_suppressed, set_undo_suppressed) = signal(false);
+    let interaction_start_snapshot = StoredValue::new(None::<GraphSnapshot>);
+
+    let capture_snapshot = move || GraphSnapshot {
         nodes: nodes.get(),
         connections: connections.get(),
         selected_node_ids: selected_node_ids.get(),
         next_node_id: next_node_id.get(),
         next_connection_id: next_connection_id.get(),
-    });
-    let is_undoing = StoredValue::new(false);
-    let (undo_suppressed, set_undo_suppressed) = signal(false);
+    };
+
+    let last_snapshot = StoredValue::new(capture_snapshot());
 
     // Snapshot effect: observes all undoable signals and pushes the previous state
     // onto the undo stack whenever a change occurs (unless the change was triggered
@@ -235,13 +239,7 @@ pub fn AppLayout() -> impl IntoView {
     // During continuous interactions (drag, selection box, connection drag) pushes
     // are suppressed so the entire gesture becomes a single undo step.
     Effect::new(move |_| {
-        let current = GraphSnapshot {
-            nodes: nodes.get(),
-            connections: connections.get(),
-            selected_node_ids: selected_node_ids.get(),
-            next_node_id: next_node_id.get(),
-            next_connection_id: next_connection_id.get(),
-        };
+        let current = capture_snapshot();
 
         if is_undoing.get_value() {
             is_undoing.set_value(false);
@@ -257,46 +255,24 @@ pub fn AppLayout() -> impl IntoView {
         }
     });
 
-    let begin_undo_suppression = {
-        let undo_manager = undo_manager.clone();
-        let nodes = nodes.clone();
-        let connections = connections.clone();
-        let selected_node_ids = selected_node_ids.clone();
-        let next_node_id = next_node_id.clone();
-        let next_connection_id = next_connection_id.clone();
-        move || {
-            if !undo_suppressed.get() {
-                let prev = GraphSnapshot {
-                    nodes: nodes.get(),
-                    connections: connections.get(),
-                    selected_node_ids: selected_node_ids.get(),
-                    next_node_id: next_node_id.get(),
-                    next_connection_id: next_connection_id.get(),
-                };
-                undo_manager.update_value(|um| um.push(prev));
-                set_undo_suppressed.set(true);
-            }
+    let begin_undo_suppression = move || {
+        if !undo_suppressed.get() {
+            interaction_start_snapshot.set_value(Some(capture_snapshot()));
+            set_undo_suppressed.set(true);
         }
     };
 
-    let end_undo_suppression = {
-        let last_snapshot = last_snapshot.clone();
-        let nodes = nodes.clone();
-        let connections = connections.clone();
-        let selected_node_ids = selected_node_ids.clone();
-        let next_node_id = next_node_id.clone();
-        let next_connection_id = next_connection_id.clone();
-        move || {
-            if undo_suppressed.get() {
-                set_undo_suppressed.set(false);
-                last_snapshot.set_value(GraphSnapshot {
-                    nodes: nodes.get(),
-                    connections: connections.get(),
-                    selected_node_ids: selected_node_ids.get(),
-                    next_node_id: next_node_id.get(),
-                    next_connection_id: next_connection_id.get(),
-                });
+    let end_undo_suppression = move || {
+        if undo_suppressed.get() {
+            set_undo_suppressed.set(false);
+            if let Some(start) = interaction_start_snapshot.get_value() {
+                let current = capture_snapshot();
+                if start != current {
+                    undo_manager.update_value(|um| um.push(start));
+                }
+                last_snapshot.set_value(current);
             }
+            interaction_start_snapshot.set_value(None);
         }
     };
 
@@ -361,27 +337,9 @@ pub fn AppLayout() -> impl IntoView {
 
     // Undo / redo helpers
     let perform_undo = {
-        let undo_manager = undo_manager.clone();
-        let is_undoing = is_undoing.clone();
-        let nodes = nodes.clone();
-        let connections = connections.clone();
-        let selected_node_ids = selected_node_ids.clone();
-        let next_node_id = next_node_id.clone();
-        let next_connection_id = next_connection_id.clone();
-        let set_nodes = set_nodes.clone();
-        let set_connections = set_connections.clone();
-        let set_selected_node_ids = set_selected_node_ids.clone();
-        let set_next_node_id = set_next_node_id.clone();
-        let set_next_connection_id = set_next_connection_id.clone();
         let add_toast = add_toast.clone();
         move || {
-            let current = GraphSnapshot {
-                nodes: nodes.get(),
-                connections: connections.get(),
-                selected_node_ids: selected_node_ids.get(),
-                next_node_id: next_node_id.get(),
-                next_connection_id: next_connection_id.get(),
-            };
+            let current = capture_snapshot();
             if let Some(Some(snapshot)) = undo_manager.try_update_value(|um| um.undo(current)) {
                 is_undoing.set_value(true);
                 set_nodes.set(snapshot.nodes);
@@ -395,27 +353,9 @@ pub fn AppLayout() -> impl IntoView {
     };
 
     let perform_redo = {
-        let undo_manager = undo_manager.clone();
-        let is_undoing = is_undoing.clone();
-        let nodes = nodes.clone();
-        let connections = connections.clone();
-        let selected_node_ids = selected_node_ids.clone();
-        let next_node_id = next_node_id.clone();
-        let next_connection_id = next_connection_id.clone();
-        let set_nodes = set_nodes.clone();
-        let set_connections = set_connections.clone();
-        let set_selected_node_ids = set_selected_node_ids.clone();
-        let set_next_node_id = set_next_node_id.clone();
-        let set_next_connection_id = set_next_connection_id.clone();
         let add_toast = add_toast.clone();
         move || {
-            let current = GraphSnapshot {
-                nodes: nodes.get(),
-                connections: connections.get(),
-                selected_node_ids: selected_node_ids.get(),
-                next_node_id: next_node_id.get(),
-                next_connection_id: next_connection_id.get(),
-            };
+            let current = capture_snapshot();
             if let Some(Some(snapshot)) = undo_manager.try_update_value(|um| um.redo(current)) {
                 is_undoing.set_value(true);
                 set_nodes.set(snapshot.nodes);
