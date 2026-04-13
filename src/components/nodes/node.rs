@@ -19,7 +19,7 @@ fn render_variant_body(
                     class="node-variant-input"
                     value={text.clone()}
                     placeholder="Enter text..."
-                    on:input={move |ev| {
+                    on:change={move |ev| {
                         let new_text = event_target_value(&ev);
                         if let Some(callback) = cb {
                             callback.run((node_id, new_text));

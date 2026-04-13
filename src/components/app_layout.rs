@@ -23,6 +23,7 @@ use crate::components::save_load::{
     paste_from_clipboard, save_saved_selections_to_storage,
 };
 use crate::components::toast::{Toast, ToastContainer, ToastType};
+use crate::components::undo::{GraphSnapshot, UndoManager};
 
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct LlmOutput {
@@ -216,6 +217,65 @@ pub fn AppLayout() -> impl IntoView {
     let (next_connection_id, set_next_connection_id) = signal(100u32);
     let (load_offset_counter, set_load_offset_counter) = signal(0u32);
 
+    // Undo/redo state
+    let undo_manager = StoredValue::new(UndoManager::new());
+    let is_undoing = StoredValue::new(false);
+    let (undo_suppressed, set_undo_suppressed) = signal(false);
+    let interaction_start_snapshot = StoredValue::new(None::<GraphSnapshot>);
+
+    let capture_snapshot = move || GraphSnapshot {
+        nodes: nodes.get(),
+        connections: connections.get(),
+        selected_node_ids: selected_node_ids.get(),
+        next_node_id: next_node_id.get(),
+        next_connection_id: next_connection_id.get(),
+    };
+
+    let last_snapshot = StoredValue::new(capture_snapshot());
+
+    // Snapshot effect: observes all undoable signals and pushes the previous state
+    // onto the undo stack whenever a change occurs (unless the change was triggered
+    // by an undo/redo operation).
+    // During continuous interactions (drag, selection box, connection drag) pushes
+    // are suppressed so the entire gesture becomes a single undo step.
+    Effect::new(move |_| {
+        let current = capture_snapshot();
+
+        if is_undoing.get_value() {
+            is_undoing.set_value(false);
+            last_snapshot.set_value(current);
+        } else if undo_suppressed.get() {
+            // Swallow intermediate changes during drag/continuous interaction.
+        } else {
+            let prev = last_snapshot.get_value();
+            if prev != current {
+                undo_manager.update_value(|um| um.push(prev));
+                last_snapshot.set_value(current);
+            }
+        }
+    });
+
+    let begin_undo_suppression = move || {
+        if !undo_suppressed.get() {
+            interaction_start_snapshot.set_value(Some(capture_snapshot()));
+            set_undo_suppressed.set(true);
+        }
+    };
+
+    let end_undo_suppression = move || {
+        if undo_suppressed.get() {
+            set_undo_suppressed.set(false);
+            if let Some(start) = interaction_start_snapshot.get_value() {
+                let current = capture_snapshot();
+                if start != current {
+                    undo_manager.update_value(|um| um.push(start));
+                }
+                last_snapshot.set_value(current);
+            }
+            interaction_start_snapshot.set_value(None);
+        }
+    };
+
     // Load saved selections on mount
     {
         let set_saved_selections = set_saved_selections.clone();
@@ -275,6 +335,39 @@ pub fn AppLayout() -> impl IntoView {
         add_toast(toast_msg.to_string(), ToastType::Success);
     };
 
+    // Undo / redo helpers
+    let perform_undo = {
+        let add_toast = add_toast.clone();
+        move || {
+            let current = capture_snapshot();
+            if let Some(Some(snapshot)) = undo_manager.try_update_value(|um| um.undo(current)) {
+                is_undoing.set_value(true);
+                set_nodes.set(snapshot.nodes);
+                set_connections.set(snapshot.connections);
+                set_selected_node_ids.set(snapshot.selected_node_ids);
+                set_next_node_id.set(snapshot.next_node_id);
+                set_next_connection_id.set(snapshot.next_connection_id);
+                add_toast("Undo".to_string(), ToastType::Info);
+            }
+        }
+    };
+
+    let perform_redo = {
+        let add_toast = add_toast.clone();
+        move || {
+            let current = capture_snapshot();
+            if let Some(Some(snapshot)) = undo_manager.try_update_value(|um| um.redo(current)) {
+                is_undoing.set_value(true);
+                set_nodes.set(snapshot.nodes);
+                set_connections.set(snapshot.connections);
+                set_selected_node_ids.set(snapshot.selected_node_ids);
+                set_next_node_id.set(snapshot.next_node_id);
+                set_next_connection_id.set(snapshot.next_connection_id);
+                add_toast("Redo".to_string(), ToastType::Info);
+            }
+        }
+    };
+
     // Non-passive window keydown listener
     static KEYDOWN_LISTENER_ADDED: std::sync::Once = std::sync::Once::new();
     let keydown_closure = wasm_bindgen::closure::Closure::wrap(Box::new({
@@ -293,6 +386,8 @@ pub fn AppLayout() -> impl IntoView {
         let set_saved_selections = set_saved_selections.clone();
         let add_toast = add_toast.clone();
         let on_selection_change = None::<Callback<Option<u32>>>;
+        let perform_undo = perform_undo.clone();
+        let perform_redo = perform_redo.clone();
 
         move |ev: web_sys::KeyboardEvent| {
             let ctrl = ev.ctrl_key() || ev.meta_key();
@@ -461,6 +556,14 @@ pub fn AppLayout() -> impl IntoView {
                     ev.prevent_default();
                     let all_ids: HashSet<u32> = nodes.get().iter().map(|n| n.id).collect();
                     set_selected_node_ids.set(all_ids);
+                }
+                (true, "z") => {
+                    ev.prevent_default();
+                    if ev.shift_key() {
+                        perform_redo();
+                    } else {
+                        perform_undo();
+                    }
                 }
                 (_, "Delete") | (_, "Backspace") => {
                     // Delete selected nodes
@@ -1033,6 +1136,8 @@ pub fn AppLayout() -> impl IntoView {
                         on_trigger={Some(Callback::new(handle_trigger))}
                         on_text_change={Some(Callback::new(move |(node_id, new_text)| handle_text_change(node_id, new_text)))}
                         on_node_right_click={Some(Callback::new(handle_node_inspect))}
+                        on_interaction_start={Some(Callback::new(move |_| begin_undo_suppression()))}
+                        on_interaction_end={Some(Callback::new(move |_| end_undo_suppression()))}
                     />
 
                     <div
