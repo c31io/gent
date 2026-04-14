@@ -34,6 +34,61 @@ pub struct LlmOutput {
     pub error: String,
 }
 
+#[derive(Debug, Clone, serde::Deserialize, Default)]
+pub struct ProviderConfig {
+    pub model: Option<String>,
+    pub api_key: Option<String>,
+    pub endpoint: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, Default)]
+pub struct LlmDefaults {
+    pub default_format: Option<String>,
+    #[serde(default)]
+    pub providers: std::collections::HashMap<String, ProviderConfig>,
+}
+
+async fn fetch_llm_defaults() -> Result<LlmDefaults, String> {
+    use crate::tauri_invoke;
+    let opts = js_sys::Object::new();
+    let js_value = tauri_invoke::invoke("get_llm_defaults".into(), &opts).await?;
+    serde_wasm_bindgen::from_value(js_value).map_err(|e| format!("deserialization failed: {:?}", e))
+}
+
+fn apply_llm_defaults_to_bundle(bundle: &mut BundledGroup, defaults: &LlmDefaults) {
+    use crate::components::canvas::state::NodeVariant;
+    for node in &mut bundle.nodes {
+        if let NodeVariant::ModelConfig {
+            format,
+            model_name,
+            api_key,
+            custom_url,
+        } = &mut node.variant
+        {
+            if let Some(ref default_fmt) = defaults.default_format {
+                format.clone_from(default_fmt);
+            }
+            if let Some(provider) = defaults.providers.get(format) {
+                if model_name.is_empty() {
+                    if let Some(ref m) = provider.model {
+                        model_name.clone_from(m);
+                    }
+                }
+                if api_key.is_empty() {
+                    if let Some(ref k) = provider.api_key {
+                        api_key.clone_from(k);
+                    }
+                }
+                if custom_url.is_empty() {
+                    if let Some(ref e) = provider.endpoint {
+                        custom_url.clone_from(e);
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Call Tauri backend for LLM completion
 async fn call_llm_complete(
     format: String,
@@ -156,23 +211,23 @@ pub fn AppLayout() -> impl IntoView {
             id: 2,
             x: 300.0,
             y: 150.0,
-            node_type: "user_input".to_string(),
+            node_type: "text_input".to_string(),
             label: "Text Input".to_string(),
             selected: false,
             status: NodeStatus::Pending,
-            variant: default_variant_for_type("user_input"),
-            ports: default_ports_for_type("user_input"),
+            variant: default_variant_for_type("text_input"),
+            ports: default_ports_for_type("text_input"),
         },
         NodeState {
             id: 3,
             x: 520.0,
             y: 150.0,
-            node_type: "chat_output".to_string(),
+            node_type: "text_output".to_string(),
             label: "Text Output".to_string(),
             selected: false,
             status: NodeStatus::Pending,
-            variant: default_variant_for_type("chat_output"),
-            ports: default_ports_for_type("chat_output"),
+            variant: default_variant_for_type("text_output"),
+            ports: default_ports_for_type("text_output"),
         },
     ]);
 
@@ -216,6 +271,7 @@ pub fn AppLayout() -> impl IntoView {
     let (next_toast_id, set_next_toast_id) = signal(0u32);
     let (next_connection_id, set_next_connection_id) = signal(100u32);
     let (load_offset_counter, set_load_offset_counter) = signal(0u32);
+    let llm_defaults = StoredValue::new(LlmDefaults::default());
 
     // Undo/redo state
     let undo_manager = StoredValue::new(UndoManager::new());
@@ -232,6 +288,16 @@ pub fn AppLayout() -> impl IntoView {
     };
 
     let last_snapshot = StoredValue::new(capture_snapshot());
+
+    // Load LLM defaults from Tauri backend
+    spawn_local({
+        let llm_defaults = llm_defaults.clone();
+        async move {
+            if let Ok(defaults) = fetch_llm_defaults().await {
+                llm_defaults.set_value(defaults);
+            }
+        }
+    });
 
     // Snapshot effect: observes all undoable signals and pushes the previous state
     // onto the undo stack whenever a change occurs (unless the change was triggered
@@ -637,90 +703,95 @@ pub fn AppLayout() -> impl IntoView {
         let exec_order_ids =
             execute_downstream_order(&nodes_snapshot, &connections_snapshot, node_id);
 
-        let mut exec = ExecutionState::new();
-        exec.running = true;
-
-        let mut node_results: HashMap<u32, String> = HashMap::new();
-
-        for exec_node_id in exec_order_ids.iter().copied() {
-            let upstream_ids = get_upstream_nodes(&connections_snapshot, exec_node_id);
-            let upstream: HashMap<u32, String> = upstream_ids
-                .into_iter()
-                .filter_map(|id| node_results.get(&id).map(|r| (id, r.clone())))
-                .collect();
-
-            if exec_node_id == node_id {
-                let mut task = Task::new(exec_node_id, "trigger", None);
-                task.status = TaskStatus::Running;
-                task.started_at = Some(Timestamp::now());
-                task.add_message(
-                    &format!("Trigger fired [task_id={}]", task.id),
-                    TraceLevel::Info,
-                );
-                task.finished_at = Some(Timestamp::now());
-                task.status = TaskStatus::Complete;
-                exec.tasks.push(task);
-            } else if let Some(node) = nodes_snapshot.iter().find(|n| n.id == exec_node_id) {
-                let parent_id = exec.tasks.last().map(|t| t.id.clone());
-
-                if node.node_type == "model" {
-                    let config_json = upstream
-                        .values()
-                        .next()
-                        .cloned()
-                        .unwrap_or_else(|| {
-                            r#"{"format":"openai","model_name":"","api_key":"","custom_url":""}"#.to_string()
-                        });
-
-                    fn get_json_str(json: &str, key: &str) -> String {
-                        let pattern = format!(r#""{}":"#, key);
-                        json.find(&pattern)
-                            .map(|start| {
-                                let value_start = start + pattern.len();
-                                let rest = &json[value_start..];
-                                if rest.starts_with('"') {
-                                    let end = rest[1..]
-                                        .find('"')
-                                        .map(|i| i + 1)
-                                        .unwrap_or(rest.len());
-                                    rest[1..end].to_string()
-                                } else {
-                                    rest.split(',')
-                                        .next()
-                                        .unwrap_or("")
-                                        .split('}')
-                                        .next()
-                                        .unwrap_or("")
-                                        .to_string()
-                                }
-                            })
-                            .unwrap_or_default()
+        let get_json_str = |json: &str, key: &str| -> String {
+            let pattern = format!(r#""{}":"#, key);
+            json.find(&pattern)
+                .map(|start| {
+                    let value_start = start + pattern.len();
+                    let rest = &json[value_start..];
+                    if rest.starts_with('"') {
+                        let end = rest[1..]
+                            .find('"')
+                            .map(|i| i + 1)
+                            .unwrap_or(rest.len());
+                        rest[1..end].to_string()
+                    } else {
+                        rest.split(',')
+                            .next()
+                            .unwrap_or("")
+                            .split('}')
+                            .next()
+                            .unwrap_or("")
+                            .to_string()
                     }
+                })
+                .unwrap_or_default()
+        };
 
-                    let config = crate::components::canvas::state::ModelConfig {
-                        format: get_json_str(&config_json, "format"),
-                        model_name: get_json_str(&config_json, "model_name"),
-                        api_key: get_json_str(&config_json, "api_key"),
-                        custom_url: get_json_str(&config_json, "custom_url"),
-                    };
+        spawn_local(async move {
+            let mut exec = ExecutionState::new();
+            exec.running = true;
 
-                    let prompt_text = upstream.values().next().cloned().unwrap_or_default();
-                    let temperature = 1.0;
+            let mut node_results: HashMap<u32, String> = HashMap::new();
 
-                    let mut model_task = Task::new(exec_node_id, "model", parent_id.clone());
-                    model_task.status = TaskStatus::Waiting;
-                    model_task.waiting_on = Some(exec_node_id);
-                    model_task.add_message(
-                        &format!(
-                            "Model call: {} / {} / prompt_len={}",
-                            config.format, config.model_name, prompt_text.len()
-                        ),
+            for exec_node_id in exec_order_ids.iter().copied() {
+                let upstream_ids = get_upstream_nodes(&connections_snapshot, exec_node_id);
+                let upstream: HashMap<u32, String> = upstream_ids
+                    .into_iter()
+                    .filter_map(|id| node_results.get(&id).map(|r| (id, r.clone())))
+                    .collect();
+
+                if exec_node_id == node_id {
+                    let mut task = Task::new(exec_node_id, "trigger", None);
+                    task.status = TaskStatus::Running;
+                    task.started_at = Some(Timestamp::now());
+                    task.add_message(
+                        &format!("Trigger fired [task_id={}]", task.id),
                         TraceLevel::Info,
                     );
-                    exec.tasks.push(model_task);
+                    task.finished_at = Some(Timestamp::now());
+                    task.status = TaskStatus::Complete;
+                    exec.tasks.push(task);
+                } else if let Some(node) = nodes_snapshot.iter().find(|n| n.id == exec_node_id) {
+                    let parent_id = exec.tasks.last().map(|t| t.id.clone());
 
-                    let exec_state_setter = set_execution_state;
-                    spawn_local(async move {
+                    if node.node_type == "model" {
+                        let config_json = connections_snapshot
+                            .iter()
+                            .find(|c| c.target_node_id == exec_node_id && c.target_port_name == "config")
+                            .and_then(|c| node_results.get(&c.source_node_id))
+                            .cloned()
+                            .unwrap_or_else(|| {
+                                r#"{"format":"openai","model_name":"","api_key":"","custom_url":""}"#.to_string()
+                            });
+
+                        let prompt_text = connections_snapshot
+                            .iter()
+                            .find(|c| c.target_node_id == exec_node_id && c.target_port_name == "prompt")
+                            .and_then(|c| node_results.get(&c.source_node_id))
+                            .cloned()
+                            .unwrap_or_default();
+
+                        let config = crate::components::canvas::state::ModelConfig {
+                            format: get_json_str(&config_json, "format"),
+                            model_name: get_json_str(&config_json, "model_name"),
+                            api_key: get_json_str(&config_json, "api_key"),
+                            custom_url: get_json_str(&config_json, "custom_url"),
+                        };
+
+                        let temperature = 1.0;
+
+                        let mut model_task = Task::new(exec_node_id, "model", parent_id.clone());
+                        model_task.status = TaskStatus::Running;
+                        model_task.started_at = Some(Timestamp::now());
+                        model_task.add_message(
+                            &format!(
+                                "Model call: {} / {} / prompt_len={}",
+                                config.format, config.model_name, prompt_text.len()
+                            ),
+                            TraceLevel::Info,
+                        );
+
                         let result = call_llm_complete(
                             config.format.clone(),
                             config.model_name.clone(),
@@ -730,71 +801,70 @@ pub fn AppLayout() -> impl IntoView {
                             temperature,
                         )
                         .await;
-                        exec_state_setter.update(|exec| {
-                            if let Some(task) = exec.tasks.iter_mut().find(|t| t.node_id == exec_node_id) {
-                                match result {
-                                    Ok(output) => {
-                                        let status = if output.error.is_empty() {
-                                            TaskStatus::Complete
-                                        } else {
-                                            TaskStatus::Error
-                                        };
-                                        let trace_msg = if output.error.is_empty() {
-                                            format!(
-                                                "LLM result: {} (model={} finish_reason={} tokens={})",
-                                                output.text, output.model, output.finish_reason, output.tokens_used
-                                            )
-                                        } else {
-                                            format!("LLM error: {}", output.error)
-                                        };
-                                        task.status = status;
-                                        task.finished_at = Some(Timestamp::now());
-                                        task.result = Some(output.text.clone());
-                                        task.add_message(&trace_msg, TraceLevel::Info);
-                                    }
-                                    Err(e) => {
-                                        task.status = TaskStatus::Error;
-                                        task.finished_at = Some(Timestamp::now());
-                                        task.add_message(
-                                            &format!("Model call failed: {}", e),
-                                            TraceLevel::Error,
-                                        );
-                                    }
-                                }
+
+                        match result {
+                            Ok(output) => {
+                                let status = if output.error.is_empty() {
+                                    TaskStatus::Complete
+                                } else {
+                                    TaskStatus::Error
+                                };
+                                let trace_msg = if output.error.is_empty() {
+                                    format!(
+                                        "LLM result: {} (model={} finish_reason={} tokens={})",
+                                        output.text, output.model, output.finish_reason, output.tokens_used
+                                    )
+                                } else {
+                                    format!("LLM error: {}", output.error)
+                                };
+                                model_task.status = status;
+                                model_task.finished_at = Some(Timestamp::now());
+                                model_task.result = Some(output.text.clone());
+                                model_task.add_message(&trace_msg, TraceLevel::Info);
+                                node_results.insert(exec_node_id, output.text);
                             }
-                        });
-                    });
-                } else {
-                    let (mut task, result) = execute_node_sync(node, &upstream, parent_id);
-                    if task.messages.len() == 1 {
-                        task.messages[0].message = format!(
-                            "{} [node_id={}, parent_id={:?}]",
-                            node.label, task.node_id, task.parent_id
-                        );
-                    }
-
-                    if node.node_type == "chat_output" {
-                        if let Some(ref input) = result {
-                            set_nodes.update(|nodes: &mut Vec<NodeState>| {
-                                if let Some(n) = nodes.iter_mut().find(|n| n.id == exec_node_id) {
-                                    if let crate::components::canvas::state::NodeVariant::ChatOutput { response } = &mut n.variant {
-                                        *response = input.clone();
-                                    }
-                                }
-                            });
+                            Err(e) => {
+                                model_task.status = TaskStatus::Error;
+                                model_task.finished_at = Some(Timestamp::now());
+                                model_task.add_message(
+                                    &format!("Model call failed: {}", e),
+                                    TraceLevel::Error,
+                                );
+                            }
                         }
-                    }
+                        exec.tasks.push(model_task);
+                    } else {
+                        let (mut task, result) = execute_node_sync(node, &upstream, parent_id);
+                        if task.messages.len() == 1 {
+                            task.messages[0].message = format!(
+                                "{} [node_id={}, parent_id={:?}]",
+                                node.label, task.node_id, task.parent_id
+                            );
+                        }
 
-                    if let Some(ref r) = result {
-                        node_results.insert(exec_node_id, r.clone());
+                        if node.node_type == "text_output" {
+                            if let Some(ref input) = result {
+                                set_nodes.update(|nodes: &mut Vec<NodeState>| {
+                                    if let Some(n) = nodes.iter_mut().find(|n| n.id == exec_node_id) {
+                                        if let crate::components::canvas::state::NodeVariant::ChatOutput { response } = &mut n.variant {
+                                            *response = input.clone();
+                                        }
+                                    }
+                                });
+                            }
+                        }
+
+                        if let Some(ref r) = result {
+                            node_results.insert(exec_node_id, r.clone());
+                        }
+                        exec.tasks.push(task);
                     }
-                    exec.tasks.push(task);
                 }
             }
-        }
 
-        exec.running = false;
-        set_execution_state.set(exec);
+            exec.running = false;
+            set_execution_state.set(exec);
+        });
     };
 
     // Callback to start palette drag
@@ -1016,7 +1086,9 @@ pub fn AppLayout() -> impl IntoView {
         let apply_load_result = apply_load_result.clone();
         let load_offset_counter = load_offset_counter.clone();
         let set_load_offset_counter = set_load_offset_counter.clone();
-        Callback::new(move |bundle: BundledGroup| {
+        let llm_defaults = llm_defaults.clone();
+        Callback::new(move |mut bundle: BundledGroup| {
+            apply_llm_defaults_to_bundle(&mut bundle, &llm_defaults.get_value());
             let selection = bundle_to_selection(bundle);
             let (mut new_nodes, new_conns, next_id, next_conn, new_ids) =
                 crate::components::save_load::load_selection(
@@ -1036,8 +1108,10 @@ pub fn AppLayout() -> impl IntoView {
         let next_node_id = next_node_id.clone();
         let next_connection_id = next_connection_id.clone();
         let apply_load_result = apply_load_result.clone();
+        let llm_defaults = llm_defaults.clone();
         Callback::new(move |(bundle_id, x, y): (String, f64, f64)| {
-            let Some(bundle) = BUNDLED_GROUPS.iter().find(|b| b.id == bundle_id).cloned() else { return };
+            let Some(mut bundle) = BUNDLED_GROUPS.iter().find(|b| b.id == bundle_id).cloned() else { return };
+            apply_llm_defaults_to_bundle(&mut bundle, &llm_defaults.get_value());
             let selection = bundle_to_selection(bundle);
             let (mut new_nodes, new_conns, next_id, next_conn, new_ids) =
                 crate::components::save_load::load_selection(

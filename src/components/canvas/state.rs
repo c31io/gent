@@ -143,7 +143,7 @@ pub struct DraggingConnection {
 /// Returns default ports for a given node_type string
 pub fn default_ports_for_type(node_type: &str) -> Vec<Port> {
     match node_type {
-        "user_input" => vec![
+        "text_input" => vec![
             Port {
                 name: "trigger".into(),
                 port_type: PortType::Trigger,
@@ -309,7 +309,7 @@ pub fn default_ports_for_type(node_type: &str) -> Vec<Port> {
                 direction: PortDirection::Out,
             },
         ],
-        "chat_output" => vec![Port {
+        "text_output" => vec![Port {
             name: "response".into(),
             port_type: PortType::Text,
             direction: PortDirection::In,
@@ -464,7 +464,7 @@ pub fn get_port_canvas_position(
 /// Returns default NodeVariant for a given node_type string
 pub fn default_variant_for_type(node_type: &str) -> NodeVariant {
     match node_type {
-        "user_input" => NodeVariant::UserInput {
+        "text_input" => NodeVariant::UserInput {
             text: String::new(),
         },
         "file_input" => NodeVariant::FileInput {
@@ -500,7 +500,7 @@ pub fn default_variant_for_type(node_type: &str) -> NodeVariant {
         },
         "if_condition" => NodeVariant::IfCondition { branches: 2 },
         "loop" => NodeVariant::Loop { iterations: 3 },
-        "chat_output" => NodeVariant::ChatOutput {
+        "text_output" => NodeVariant::ChatOutput {
             response: String::new(),
         },
         "json_output" => NodeVariant::JsonOutput {

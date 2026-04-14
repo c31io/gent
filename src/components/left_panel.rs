@@ -27,7 +27,7 @@ pub struct NodeType {
 pub const NODE_TYPES: &[NodeType] = &[
     // Input
     NodeType {
-        id: "user_input",
+        id: "text_input",
         name: "Text Input",
         category: "Input",
         description: "Text input from user",
@@ -128,7 +128,7 @@ pub const NODE_TYPES: &[NodeType] = &[
     },
     // Output
     NodeType {
-        id: "chat_output",
+        id: "text_output",
         name: "Text Output",
         category: "Output",
         description: "Display chat response",

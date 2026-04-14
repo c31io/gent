@@ -27,10 +27,10 @@ pub static BUNDLED_GROUPS: LazyLock<Vec<BundledGroup>> = LazyLock::new(|| {
         description: "Trigger -> Text Input -> Model Config -> Model -> Text Output",
         nodes: vec![
             bundled_node(101, 80.0, 150.0, "trigger", "Trigger"),
-            bundled_node(102, 300.0, 150.0, "user_input", "Text Input"),
+            bundled_node(102, 300.0, 150.0, "text_input", "Text Input"),
             bundled_node(103, 300.0, 280.0, "model_config", "Model Config"),
             bundled_node(104, 520.0, 250.0, "model", "Model"),
-            bundled_node(105, 740.0, 250.0, "chat_output", "Text Output"),
+            bundled_node(105, 740.0, 250.0, "text_output", "Text Output"),
         ],
         connections: vec![
             ConnectionState {

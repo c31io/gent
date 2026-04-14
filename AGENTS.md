@@ -139,6 +139,23 @@ Shortcuts are ignored when focus is in a text input.
 - Supports OpenAI and Anthropic APIs.
 - API keys can be provided per-node or fall back to environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`).
 - Custom base URLs are supported for OpenAI-compatible endpoints.
+- **XDG Config defaults**: On startup the Tauri backend loads `~/.config/gent/config.toml` (or platform equivalent). Empty fields in a `Model Config` node are backfilled from this file before the LLM request is sent.
+  ```toml
+  default_format = "openai"
+
+  [providers.openai]
+  model = "gpt-4o-mini"
+  api_key = "sk-..."
+  endpoint = "https://api.openai.com/v1"
+
+  [providers.anthropic]
+  model = "claude-3-5-sonnet-latest"
+  api_key = "sk-ant-..."
+  ```
+  - `default_format` is used when the node leaves the format field empty.
+  - `endpoint` maps to the node's `custom_url` field.
+  - Backend code: `src-tauri/src/config.rs` (loading), `src-tauri/src/llm.rs` (merging).
+  - Tauri command `get_llm_defaults` exposes the loaded config to the frontend.
 
 ## Security Considerations
 

@@ -119,7 +119,7 @@ pub fn get_upstream_nodes(
         .collect()
 }
 
-/// Execute nodes in topological order (BFS from trigger)
+/// Execute nodes in topological order (BFS from trigger, including upstream dependencies)
 pub fn execute_downstream_order(
     nodes: &[super::canvas::state::NodeState],
     connections: &[super::canvas::state::ConnectionState],
@@ -140,8 +140,42 @@ pub fn execute_downstream_order(
         *in_degree.entry(conn.target_node_id).or_insert(0) += 1;
     }
 
+    // 1. Find all nodes reachable downstream from the trigger
+    let mut reachable: std::collections::HashSet<u32> = std::collections::HashSet::new();
+    let mut reach_queue: VecDeque<u32> = VecDeque::new();
+    reach_queue.push_back(trigger_id);
+    reachable.insert(trigger_id);
+
+    while let Some(node_id) = reach_queue.pop_front() {
+        if let Some(downstream_ids) = adj.get(&node_id) {
+            for &downstream_id in downstream_ids {
+                if reachable.insert(downstream_id) {
+                    reach_queue.push_back(downstream_id);
+                }
+            }
+        }
+    }
+
+    // 2. Expand reachable set to include all upstream dependencies
+    loop {
+        let mut added = false;
+        for conn in connections {
+            if reachable.contains(&conn.target_node_id) && reachable.insert(conn.source_node_id) {
+                added = true;
+            }
+        }
+        if !added {
+            break;
+        }
+    }
+
+    // 3. Topological sort restricted to the reachable set
     let mut queue: VecDeque<u32> = VecDeque::new();
-    queue.push_back(trigger_id);
+    for node in nodes {
+        if reachable.contains(&node.id) && in_degree.get(&node.id).copied().unwrap_or(0) == 0 {
+            queue.push_back(node.id);
+        }
+    }
 
     let mut execution_order: Vec<u32> = vec![];
 
@@ -150,9 +184,11 @@ pub fn execute_downstream_order(
 
         if let Some(downstream_ids) = adj.get(&node_id) {
             for &downstream_id in downstream_ids {
-                *in_degree.entry(downstream_id).or_insert(0) -= 1;
-                if in_degree[&downstream_id] == 0 {
-                    queue.push_back(downstream_id);
+                if reachable.contains(&downstream_id) {
+                    *in_degree.entry(downstream_id).or_insert(0) -= 1;
+                    if in_degree[&downstream_id] == 0 {
+                        queue.push_back(downstream_id);
+                    }
                 }
             }
         }
@@ -178,7 +214,7 @@ pub fn execute_node_sync(
             task.add_message("Trigger fired", TraceLevel::Info);
             None
         }
-        "user_input" => {
+        "text_input" => {
             if let NodeVariant::UserInput { text } = &node.variant {
                 task.add_message(&format!("Text Input: {}", text), TraceLevel::Info);
                 Some(text.clone())
@@ -187,7 +223,7 @@ pub fn execute_node_sync(
                 Some(String::new())
             }
         }
-        "chat_output" => {
+        "text_output" => {
             let input = upstream_results.values().next().cloned().unwrap_or_default();
             task.add_message(&format!("Text Output received: {}", input), TraceLevel::Info);
             Some(input)

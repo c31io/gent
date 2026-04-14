@@ -2,6 +2,38 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::env;
 
+use crate::config;
+
+fn merge_with_config(mut config: LlmConfig) -> LlmConfig {
+    let app_config = config::get_config();
+
+    if config.format.is_empty() {
+        if let Some(ref fmt) = app_config.default_format {
+            config.format = fmt.clone();
+        }
+    }
+
+    if let Some(provider) = app_config.providers.get(&config.format) {
+        if config.model_name.is_empty() {
+            if let Some(ref model) = provider.model {
+                config.model_name = model.clone();
+            }
+        }
+        if config.api_key.is_empty() {
+            if let Some(ref key) = provider.api_key {
+                config.api_key = key.clone();
+            }
+        }
+        if config.custom_url.is_empty() {
+            if let Some(ref endpoint) = provider.endpoint {
+                config.custom_url = endpoint.clone();
+            }
+        }
+    }
+
+    config
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmConfig {
     pub format: String,     // "openai" | "anthropic"
@@ -84,6 +116,7 @@ struct AnthropicUsage {
 }
 
 pub async fn llm_complete(config: LlmConfig, input: LlmInput) -> LlmOutput {
+    let config = merge_with_config(config);
     let model = config.model_name.clone();
     let api_key = match resolve_api_key(&config) {
         Ok(k) => k,
@@ -173,7 +206,11 @@ pub async fn llm_complete(config: LlmConfig, input: LlmInput) -> LlmOutput {
             }
         }
         "anthropic" => {
-            let url = "https://api.anthropic.com/v1/messages";
+            let url = if !config.custom_url.is_empty() {
+                format!("{}/messages", config.custom_url.trim_end_matches('/'))
+            } else {
+                "https://api.anthropic.com/v1/messages".to_string()
+            };
             let body = serde_json::json!({
                 "model": model,
                 "messages": [{"role": "user", "content": input.prompt}],

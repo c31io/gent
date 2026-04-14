@@ -6,6 +6,7 @@ use crate::scripts::commands::{list_scripts, read_script, run_script, save_scrip
 use std::process::Command;
 use std::sync::Arc;
 
+mod config;
 mod llm;
 mod plugins;
 pub mod scripts;
@@ -16,6 +17,11 @@ async fn llm_complete(
     input: llm::LlmInput,
 ) -> Result<llm::LlmOutput, String> {
     Ok(llm::llm_complete(config, input).await)
+}
+
+#[tauri::command]
+fn get_llm_defaults() -> Result<config::AppConfig, String> {
+    Ok(config::get_config().clone())
 }
 
 #[tauri::command]
@@ -58,6 +64,9 @@ async fn export_graph(path: String, json: String) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Load XDG config (~/.config/gent/config.toml)
+    config::load_config();
+
     // Initialize Rune engine singleton
     let rune_engine =
         crate::scripts::engine::RuneEngine::new().expect("failed to initialize Rune engine");
@@ -77,6 +86,7 @@ pub fn run() {
             show_main_window,
             execute_code,
             llm_complete,
+            get_llm_defaults,
             load_plugin,
             load_plugin_from_path,
             list_plugins,
